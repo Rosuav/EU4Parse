@@ -2234,7 +2234,7 @@ class Connection(Stdio.File sock) {
 void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
 Stdio.File parser_pipe = Stdio.File();
-int parsing = 0;
+int parsing = 0, mods_inconsistent = 0;
 void process_savefile(string fn) {parsing = 1; send_updates_all(); parser_pipe->write(fn + "\n");}
 void done_processing_savefile(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
@@ -2245,7 +2245,7 @@ void done_processing_savefile(object pipe, string msg) {
 	if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
 	write("\nCurrent date: %s\n", data->date);
 	string mods = (data->mods_enabled_names||({}))->filename * ",";
-	if (mods != currently_loaded_mods) werror("\e[1;37;41m\n\nMODS INCONSISTENT, save file may not parse correctly! Restart parser to update mod selection\n\e[0m\n\n");
+	mods_inconsistent = mods != currently_loaded_mods;
 	indices(connections[""])->inform(data);
 	provincecycle = ([]);
 	last_parsed_savefile = data;
@@ -2643,6 +2643,7 @@ array recent_peace_treaties = ({ }); //Recent peace treaties only, but hopefully
 mapping get_state(string group) {
 	mapping data = last_parsed_savefile; //Get a local reference in case it changes while we're processing
 	if (!data) return (["error": "Processing savefile... "]);
+	if (mods_inconsistent) return (["error": "MODS INCONSISTENT, restart parser to fix"]); //TODO: Never do this, just fix automatically
 	//For the landing page, offer a menu of player countries
 	if (group == "?!?") return (["menu": data->players_countries / 2]);
 	string tag = group;
