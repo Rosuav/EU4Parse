@@ -5,8 +5,10 @@
    - Import it into the main analysis script, and also run it standalone for save files
 3. Analysis
 4. Web server (incl websockets)
+5. Persist
 Others?
 */
+//TODO: Use @export to simplify things (lift from StilleBot)
 /*
 NOTE: Province group selection inverts the normal rules and has the web client in charge.
 This ensures that there can be no desynchronization between user view and province ID
@@ -32,8 +34,11 @@ If there are any issues remaining - notably, if anything crashes - report it on 
 that and the above are all done, the server can become purely a service, no console needed.
 */
 
-constant SAVE_PATH = "../.local/share/Paradox Interactive/Europa Universalis IV/save games";
+constant LOCAL_PATH = "../.local/share/Paradox Interactive/Europa Universalis IV";
+constant SAVE_PATH = LOCAL_PATH + "/save games";
 constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"; //Append /map or /common etc to access useful data files
+
+mapping G = ([]);
 
 #ifdef QUIET
 //Run "pike -DQUIET eu4_parse.pike ...." to avoid warnings from the LR Parser module. Obviously,
@@ -109,7 +114,8 @@ maparray addarray(maparray arr, mixed val) {return arr->addidx(val);}
 mapping emptymaparray() {return ([]);}
 
 object progress_pipe;
-constant PARSE_PROGRESS_FRACTION = 20; //Report at 1/10, 2/10, 3/10 etc of progress
+constant PARSE_PROGRESS_FRACTION = 20; //Report at 1/20, 2/20, 3/20 etc of progress
+//TODO: Move into parser.pike and also rename since it does everything, not just save files
 mapping low_parse_savefile(string|Stdio.Buffer data, int|void verbose) {
 	if (stringp(data)) data = Stdio.Buffer(data); //NOTE: Restricted to eight-bit data. Since EU4 uses ISO-8859-1, that's not a problem. Be aware for future.
 	data->read_only();
@@ -2146,7 +2152,7 @@ class Connection(Stdio.File sock) {
 	void cycle_provinces(string country) {
 		if (!last_parsed_savefile) return;
 		string id;
-		if (!provincecycle[country]) {
+		if (!G->G->provincecycle[country]) {
 			string tag = find_country(last_parsed_savefile, country); if (!tag) return;
 			if (!interesting_provinces[tag]) analyze(last_parsed_savefile, "Province finder", tag); //Should this be sent to /dev/null instead of the console?
 			if (!sizeof(interesting_provinces[tag])) {sock->close("w"); return;}
@@ -2154,9 +2160,9 @@ class Connection(Stdio.File sock) {
 			interesting_provinces[tag] = rest + ({id});
 		}
 		else {
-			[id, array rest] = Array.shift(provincecycle[country]);
-			provincecycle[country] = rest + ({id});
-			update_group(country);
+			[id, array rest] = Array.shift(G->G->provincecycle[country]);
+			G->G->provincecycle[country] = rest + ({id});
+			G->webserver->update_group(country);
 		}
 		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
 		//put a "shutdown write direction when done" marker into the Buffer.
@@ -2242,22 +2248,22 @@ class Connection(Stdio.File sock) {
 void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
 Stdio.File parser_pipe = Stdio.File();
-int parsing = 0, mods_inconsistent = 0;
-void process_savefile(string fn) {parsing = 1; send_updates_all(); parser_pipe->write(fn + "\n");}
+int parsing = 0;
+void process_savefile(string fn) {parsing = 1; G->webserver->send_updates_all(); parser_pipe->write(fn + "\n");}
 void done_processing_savefile(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
 	//TODO: Deduplicate parsing definition with the main update handler
-	if (has_value(msg, '+')) {++parsing; send_update(`+(({ }), @values(websocket_groups)), (["parsing": parsing && (parsing - 1) * 100 / PARSE_PROGRESS_FRACTION]));}
+	if (has_value(msg, '+')) {++parsing; G->webserver->send_to_all((["cmd": "update", "parsing": parsing && (parsing - 1) * 100 / PARSE_PROGRESS_FRACTION]));}
 	if (!has_value(msg, '*')) return;
 	mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
 	if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
 	write("\nCurrent date: %s\n", data->date);
 	string mods = (data->mods_enabled_names||({}))->filename * ",";
-	mods_inconsistent = mods != currently_loaded_mods;
+	G->G->mods_inconsistent = mods != currently_loaded_mods;
 	indices(connections[""])->inform(data);
-	provincecycle = ([]);
+	G->G->provincecycle = ([]);
 	last_parsed_savefile = data;
-	parsing = 0; send_updates_all();
+	parsing = 0; G->webserver->send_updates_all();
 }
 
 class PipeConnection {
@@ -2271,354 +2277,6 @@ class PipeConnection {
 		}
 	}
 }
-
-mapping(string:Image.Image) image_cache = ([]);
-mapping custom_country_colors;
-Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
-	if (!image_cache[fn]) {
-		string raw = Stdio.read_file(fn);
-		if (!raw) return withhash ? ({0, 0}) : 0;
-		sscanf(Crypto.SHA1.hash(raw), "%20c", int hash);
-		function decoder = Image.ANY.decode;
-		if (has_suffix(fn, ".tga")) decoder = Image.TGA.decode; //Automatic detection doesn't pick these properly.
-		if (has_prefix(raw, "DDS")) {
-			//Custom flag symbols, unfortunately, come from a MS DirectDraw file. Pike's image
-			//library can't read this format, so we have to get help from ImageMagick.
-			mapping rc = Process.run(({"convert", fn, "png:-"}));
-			//assert rc=0, stderr=""
-			raw = rc->stdout;
-			decoder = Image.PNG._decode; //HACK: This actually returns a mapping, not just an image.
-		}
-		if (catch {image_cache[fn] = ({decoder(raw), hash});}) {
-			//Try again via ImageMagick.
-			mapping rc = Process.run(({"convert", fn, "png:-"}));
-			image_cache[fn] = ({Image.PNG.decode(rc->stdout), hash});
-		}
-	}
-	if (withhash) return image_cache[fn];
-	else return image_cache[fn][0];
-}
-
-mapping(string:array(object)) websocket_groups = ([]);
-mapping respond(Protocols.HTTP.Server.Request req) {
-	mapping mimetype = (["eu4_parse.js": "text/javascript", "eu4_parse.css": "text/css"]);
-	if (string ty = mimetype[req->not_query[1..]]) return ([
-		"type": ty, "file": Stdio.File(req->not_query[1..]),
-		"extra_heads": (["Access-Control-Allow-Origin": "*"]),
-	]);
-	if (req->not_query == "/" || sscanf(req->not_query, "/tag/%s", string tag)) return ([
-		"type": "text/html",
-		"data": sprintf(#"<!DOCTYPE HTML><html lang=en>
-<head><title>EU4 Savefile Analysis</title><link rel=stylesheet href=\"/eu4_parse.css\"><style id=ideafilterstyles></style></head>
-<body><script>
-let ws_code = new URL(\"/eu4_parse.js\", location.href), ws_type = \"eu4\", ws_group = \"%s\";
-let ws_sync = null; import('https://sikorsky.rosuav.com/static/ws_sync.js').then(m => ws_sync = m);
-</script><main></main></body></html>
-", Protocols.HTTP.uri_decode(tag || "?!?")),
-	]);
-	if (sscanf(req->not_query, "/flags/%[A-Z_a-z0-9]%[-0-9A-F].%s", string tag, string color, string ext) && tag != "" && ext == "png") {
-		//Generate a country flag in PNG format
-		string etag; Image.Image img;
-		if (tag == "Custom") {
-			//Custom nation flags are defined by a symbol and four colours.
-			sscanf(color, "-%d-%d-%d-%d-%d%s", int symbol, int flag, int color1, int color2, int color3, color);
-			if (!color || sizeof(color) != 7 || color[0] != '-') color = "";
-			//If flag (the "Background" in the UI) is 0-33 (1-34 in the UI), it is a two-color
-			//flag defined in gfx/custom_flags/pattern.tga, which is a spritesheet of 128x128
-			//sections, ten per row, four rows. Replace red with color1, green with color2.
-			//If it is 34-53 (35-54 in the UI), it is a three-color flag from pattern2.tga,
-			//also ten per row, two rows, also 128x128. Replace blue with color3.
-			//(Some of this could be parsed out of custom_country_colors. Hardcoded for now.)
-			[Image.Image backgrounds, int bghash] = load_image(PROGRAM_PATH + "/gfx/custom_flags/pattern" + "2" * (flag >= 34) + ".tga", 1);
-			//NOTE: Symbols for custom nations are drawn from a pool of 120, of which client states
-			//are also selected, but restricted by religious group. (Actually there seem to be 121 on
-			//the spritesheet, but the last one isn't available to customs.)
-			//The symbol spritesheet is 4 rows of 32, each 64x64. It might be possible to find
-			//this info in the edit files somewhere, but for now I'm hard-coding it.
-			[mapping symbols, int symhash] = load_image(PROGRAM_PATH + "/gfx/interface/client_state_symbols_large.dds", 1);
-			//Note that if the definitions of the colors change but the spritesheets don't,
-			//we'll generate the exact same etag. Seems unlikely, and not that big a deal anyway.
-			etag = sprintf("W/\"%x-%x-%d-%d-%d-%d-%d%s\"", bghash, symhash, symbol, flag, color1, color2, color3, color);
-			if (has_value(req->request_headers["if-none-match"] || "", etag)) return (["error": 304]); //Already in cache
-			if (flag >= 34) flag -= 34; //Second sheet of patterns
-			int bgx = 128 * (flag % 10), bgy = 128 * (flag / 10);
-			int symx = 64 * (symbol % 32), symy = 64 * (symbol / 32);
-			img = backgrounds->copy(bgx, bgy, bgx + 127, bgy + 127)
-				->change_color(255, 0, 0, @(array(int))custom_country_colors->flag_color[color1])
-				->change_color(0, 255, 0, @(array(int))custom_country_colors->flag_color[color2])
-				->change_color(0, 0, 255, @(array(int))custom_country_colors->flag_color[color3])
-				->paste_mask(
-					symbols->image->copy(symx, symy, symx + 63, symy + 63),
-					symbols->alpha->copy(symx, symy, symx + 63, symy + 63),
-				32, 32);
-		}
-		else {
-			//Standard flags are loaded as-is.
-			[img, int hash] = load_image(PROGRAM_PATH + "/gfx/flags/" + tag + ".tga", 1);
-			if (!img) return 0;
-			//For colonial nations, instead of using the country's own tag (eg C03), we get
-			//a flag definition based on the parent country and a colour.
-			if (!color || sizeof(color) != 7 || color[0] != '-') color = "";
-			//NOTE: Using weak etags since the result will be semantically identical, but
-			//might not be byte-for-byte (since the conversion to PNG might change it).
-			etag = sprintf("W/\"%x%s\"", hash, color);
-			if (has_value(req->request_headers["if-none-match"] || "", etag)) return (["error": 304]); //Already in cache
-		}
-		if (sscanf(color, "-%2x%2x%2x", int r, int g, int b))
-			img = img->copy()->box(img->xsize() / 2, 0, img->xsize(), img->ysize(), r, g, b);
-		//TODO: Mask flags off with shield_mask.tga or shield_fancy_mask.tga or small_shield_mask.tga
-		//I'm using 128x128 everywhere, but the fancy mask (the largest) is only 92x92. For inline
-		//flags in text, small_shield_mask is the perfect 24x24.
-		return ([
-			"type": "image/png", "data": Image.PNG.encode(img),
-			"extra_heads": (["ETag": etag, "Cache-Control": "max-age=604800"]),
-		]);
-	}
-}
-constant NOT_FOUND = (["error": 404, "type": "text/plain", "data": "Not found"]);
-void http_handler(Protocols.HTTP.Server.Request req) {req->response_and_finish(respond(req) || NOT_FOUND);}
-
-//Persisted prefs, keyed by country tag or player name. They apply to all connections for that user (to prevent inexplicable loss of config on dc).
-mapping(string:mapping(string:mixed)) tag_preferences = ([]);
-mapping(string:string) effect_display_mode = ([]); //If an effect is not listed, display it as a number (threeplace)
-//tag_preferences->Rosuav ==> prefs for Rosuav, regardless of country
-//tag_preferences->CAS ==> prefs for Castille, regardless of player
-//...->highlight_interesting == building ID highlighted for further construction
-//...->group_selection == slash-delimited path to the group of provinces to cycle through
-//...->cycle_province_ids == array of (string) IDs to cycle through; if absent or empty, use default algorithm
-//...->pinned_provinces == mapping of (string) IDs to sequential numbers
-//...->search == current search term
-mapping(string:array(string)) provincecycle = ([]); //Not saved into preferences. Calculated from tag_preferences[group]->cyclegroup and the save file.
-mapping persist_path(string ... parts)
-{
-	mapping ret = tag_preferences;
-	foreach (parts, string idx)
-	{
-		if (undefinedp(ret[idx])) ret[idx] = ([]);
-		ret = ret[idx];
-	}
-	return ret;
-}
-void persist_save() {Stdio.write_file(".eu4_preferences.json", Standards.JSON.encode(([
-	"tag_preferences": tag_preferences,
-	"effect_display_mode": effect_display_mode,
-]), 7));}
-
-void websocket_cmd_highlight(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	if (!building_types[data->building]) m_delete(prefs, "highlight_interesting");
-	else prefs->highlight_interesting = data->building;
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_fleetpower(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	prefs->fleetpower = threeplace(data->power) || 1000;
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_goto(mapping conn, mapping data) {
-	indices(connections["province"])->provnotify(data->tag, (int)data->province);
-}
-
-void websocket_cmd_pin(mapping conn, mapping data) {
-	mapping pins = persist_path(conn->group, "pinned_provinces");
-	if (pins[data->province]) m_delete(pins, data->province);
-	else if (last_parsed_savefile->provinces["-" + data->province]) pins[data->province] = max(@values(pins)) + 1;
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_cyclegroup(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	if (!data->cyclegroup || data->cyclegroup == "") m_delete(prefs, "cyclegroup");
-	else prefs->cyclegroup = data->cyclegroup;
-	m_delete(provincecycle, conn->group);
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_cycleprovinces(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	if (prefs->cyclegroup != data->cyclegroup) return;
-	if (!prefs->cyclegroup || !arrayp(data->provinces)) m_delete(provincecycle, conn->group);
-	else provincecycle[conn->group] = (array(string))(array(int))data->provinces - ({"0"});
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_cyclenext(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	string country = conn->group;
-	if (!arrayp(provincecycle[country])) return; //Can't use this for the default cycling of "interesting" provinces. Pick explicitly.
-	[int id, array rest] = Array.shift(provincecycle[country]);
-	provincecycle[country] = rest + ({id});
-	update_group(country);
-	indices(connections["province"])->provnotify(data->tag, (int)id);
-}
-
-void websocket_cmd_search(mapping conn, mapping data) {
-	mapping prefs = persist_path(conn->group);
-	prefs->search = stringp(data->term) ? lower_case(data->term) : "";
-	persist_save(); update_group(conn->group);
-}
-
-void websocket_cmd_set_effect_mode(mapping conn, mapping data) {
-	if (!stringp(data->effect)) return;
-	if (!has_value("threeplace percent boolean" / " ", data->mode)) return;
-	effect_display_mode[data->effect] = data->mode;
-	persist_save();
-	//Note that currently-connected clients do not get updated.
-}
-
-void websocket_cmd_listcustoms(mapping conn, mapping data) {
-	string customdir = SAVE_PATH + "/../custom nations";
-	mapping nations = ([]);
-	foreach (sort(get_dir(customdir)), string fn)
-		nations[fn] = low_parse_savefile(Stdio.read_file(customdir + "/" + fn));
-	send_update(({conn->sock}), ([
-		"cmd": "customnations",
-		"nations": nations,
-		"custom_ideas": custom_ideas,
-		"effect_display_mode": effect_display_mode,
-		"map_colors": custom_country_colors->color,
-	]));
-}
-
-constant custnat_keys = "name adjective country_colors index graphical_culture technology_group religion "
-			"government government_reform government_rank idea culture monarch heir queen" / " ";
-mapping custnat_handlers = ([
-	"country_colors": lambda(mapping col) {
-		return sprintf(#"{
-	flag=%s
-	color=%s
-	symbol_index=%s
-	flag_colors={
-		%{%s %}
-	}
-}", col->flag, col->color, col->symbol_index, col->flag_colors);
-	},
-	"idea": lambda(array idea) {
-		return "{" + sprintf(#"
-	{
-		level=%s
-		index=%s
-		name=%q
-		desc=%q
-	}", idea->level[*], idea->index[*], idea->name[*], idea->desc[*]) * "" + "\n}";
-	},
-	"monarch": lambda(mapping mon) {
-		return sprintf(#"{
-	admin=%s
-	diplomacy=%s
-	military=%s
-	age=%s
-	religion=%s
-	culture=%q
-	female=%s
-	name=%q
-	dynasty=%q
-	is_null=%s
-	personality={
-%{		%q
-%}	}
-}", mon->admin, mon->diplomacy, mon->military, mon->age, mon->religion, mon->culture || "",
-		mon->female ? "yes" : "no", mon->name || "", mon->dynasty || "", mon->is_null ? "yes" : "no",
-		mon->personality);
-	},
-	"heir": "monarch", "queen": "monarch",
-]);
-
-string save_custom_nation(mapping data) {
-	//In order to save a custom nation:
-	//1) The nation definition file must already exist
-	//2) It must begin with a manually-added comment line starting "# Editable: "
-	//3) The save request must include the rest of the line, which is a sort of password
-	//4) All attributes to be saved must be included.
-	//It's up to you to make sure the file actually is loadable. The easiest way is to
-	//make minor, specific changes to an existing custom nation.
-	string customdir = SAVE_PATH + "/../custom nations";
-	string fn = data->filename; if (!fn) return "Need a file name";
-	if (!has_value(get_dir(customdir), fn)) return "File not found";
-	sscanf(Stdio.read_file(customdir + "/" + fn), "# Editable: %s\n", string pwd);
-	if (!pwd || pwd != data->password) return "Permission denied";
-	//Okay. Let's build up a file. We'll look for keys in a specific order, to make
-	//the file more consistent (no point randomly reordering stuff).
-	string output = sprintf("# Editable: %s\n", pwd);
-	foreach (custnat_keys, string key) {
-		mapping val = data->data[key];
-		if (stringp(val) || intp(val)) {
-			//Strings that look like numbers get output without quotes
-			if ((string)(int)val == val) output += sprintf("%s=%d\n", key, (int)val);
-			else output += sprintf("%s=%q\n", key, val);
-		}
-		else if (arrayp(val) || mappingp(val)) {
-			function|string f = custnat_handlers[key];
-			if (stringp(f)) f = custnat_handlers[f]; //Alias one to another
-			if (f) output += sprintf("%s=%s\n", key, f(val));
-		}
-	}
-	Stdio.write_file(customdir + "/" + fn, output);
-	return "Saved.";
-}
-
-void websocket_cmd_savecustom(mapping conn, mapping data) {
-	string ret = save_custom_nation(data);
-	send_update(({conn->sock}), ([
-		"cmd": "savecustom",
-		"result": ret,
-	]));
-}
-
-void ws_msg(Protocols.WebSocket.Frame frm, mapping conn)
-{
-	mixed data;
-	if (catch {data = Standards.JSON.decode(frm->text);}) return; //Ignore frames that aren't text or aren't valid JSON
-	if (!stringp(data->cmd)) return;
-	if (data->cmd == "init")
-	{
-		//Initialization is done with a type and a group.
-		//The type has to be "eu4", and exists for convenient compatibility with StilleBot.
-		//The group is a country tag or player name as a string.
-		if (conn->type) return; //Can't init twice
-		if (data->type != "eu4") return; //Ignore any unknown types.
-		//Note that we don't validate the group here, beyond basic syntactic checks. We might have
-		//the wrong save loaded, in which case the precise country tag won't yet exist.
-		if (!stringp(data->group)) return;
-		write("Socket connection established for %O\n", data->group);
-		conn->type = data->type; conn->group = data->group;
-		websocket_groups[conn->group] += ({conn->sock});
-		send_update(({conn->sock}), get_state(data->group));
-		return;
-	}
-	if (function handler = this["websocket_cmd_" + data->cmd]) handler(conn, data);
-	else write("Message: %O\n", data);
-}
-
-void ws_close(int reason, mapping conn)
-{
-	if (conn->type == "eu4") websocket_groups[conn->group] -= ({conn->sock});
-	m_delete(conn, "sock"); //De-floop
-}
-
-void ws_handler(array(string) proto, Protocols.WebSocket.Request req)
-{
-	if (req->not_query != "/ws") {req->response_and_finish(NOT_FOUND); return;}
-	Protocols.WebSocket.Connection sock = req->websocket_accept(0);
-	sock->set_id((["sock": sock])); //Minstrel Hall style floop
-	sock->onmessage = ws_msg;
-	sock->onclose = ws_close;
-}
-
-void send_update(array(object) socks, mapping state) {
-	if (!socks || !sizeof(socks)) return;
-	string resp = Standards.JSON.encode((["cmd": "update"]) | state, 4);
-	foreach (socks, object sock)
-		if (sock && sock->state == 1) sock->send_text(resp);
-}
-
-void update_group(string tag) {
-	array socks = websocket_groups[tag];
-	if (socks && sizeof(socks)) send_update(websocket_groups[tag], get_state(tag) | (["parsing": parsing && (parsing - 1) * 100 / PARSE_PROGRESS_FRACTION]));
-}
-void send_updates_all() {foreach (websocket_groups; string tag;) update_group(tag);}
 
 /* Peace treaty analysis
 
@@ -2648,103 +2306,7 @@ To check:
 */
 
 array recent_peace_treaties = ({ }); //Recent peace treaties only, but hopefully useful
-mapping get_state(string group) {
-	mapping data = last_parsed_savefile; //Get a local reference in case it changes while we're processing
-	if (!data) return (["error": "Processing savefile... "]);
-	if (mods_inconsistent) return (["error": "MODS INCONSISTENT, restart parser to fix"]); //TODO: Never do this, just fix automatically
-	//For the landing page, offer a menu of player countries
-	if (group == "?!?") return (["menu": data->players_countries / 2]);
-	string tag = group;
-	if (!data->countries[tag]) {
-		//See if it's a player identifier. These get rechecked every get_state
-		//because they will track the player through tag changes (eg if you were
-		//Castille (CAS) and you form Spain (SPA), your tag will change, but you
-		//want to see data for Spain now plsthx).
-		foreach (data->players_countries / 2, [string name, string trytag])
-			if (lower_case(tag) == lower_case(name)) tag = trytag;
-	}
-	mapping country = data->countries[tag];
-	if (!country) return (["error": "Country/player not found: " + group]);
-	mapping ret = (["tag": tag, "self": data->countries[tag], "highlight": ([]), "recent_peace_treaties": recent_peace_treaties]);
-	ret->capital_province = data->provinces["-" + data->countries[tag]->capital];
-	analyze(data, group, tag, ret, persist_path(group));
-	multiset players = (multiset)((data->players_countries || ({ })) / 2)[*][1]; //Normally, show all wars involving players.
-	if (!players[tag]) players = (<tag>); //But if you switch to a non-player country, show that country's wars instead.
-	analyze_wars(data, players, ret);
-	analyze_flagships(data, ret);
-	//Enumerate available building types for highlighting. TODO: Check if some changes here need to be backported to the console interface.
-	mapping available = ([]);
-	mapping tech = country->technology;
-	int have_mfg = 0;
-	foreach (building_types; string id; mapping bldg) {
-		[string techtype, int techlevel] = bldg->tech_required || ({"", 100}); //Ignore anything that's not a regular building
-		if ((int)tech[techtype] < techlevel) continue; //Hide IDs you don't have the tech to build
-		if (bldg->manufactory && !bldg->show_separate) {have_mfg = 1; continue;} //Collect regular manufactories under one name
-		if (bldg->influencing_fort) continue; //You won't want to check forts this way
-		available[id] = ([
-			"id": id, "name": L10n["building_" + id],
-			"cost": bldg->manufactory ? 500 : (int)bldg->cost,
-			"raw": bldg,
-		]);
-	}
-	//Restrict to only those buildings for which you don't have an upgrade available
-	foreach (indices(available), string id) if (available[building_types[id]->obsoleted_by]) m_delete(available, id);
-	if (have_mfg) available->manufactory = ([ //Note that building_types->manufactory is technically valid
-		"id": "manufactory", "name": "Manufactory (standard)",
-		"cost": 500,
-	]);
-	array bldg = values(available); sort(indices(available), bldg);
-	ret->buildings_available = bldg;
-	mapping prefs = persist_path(group);
-	mapping pp = prefs->pinned_provinces || ([]);
-	array ids = indices(pp); sort(values(pp), ids);
-	ret->pinned_provinces = map(ids) {return ({__ARGS__[0], data->provinces["-" + __ARGS__[0]]->?name || "(unknown)"});};
-	if (prefs->cyclegroup) {ret->cyclegroup = prefs->cyclegroup; ret->cycleprovinces = provincecycle[group];}
-
-	string term = prefs->search;
-	array results = ({ }), order = ({ });
-	if (term != "") {
-		foreach (sort(indices(data->provinces)), string id) { //Sort by ID for consistency
-			mapping prov = data->provinces[id];
-			foreach (({({prov->name, ""})}) + (province_localised_names[id - "-"]||({ })), [string|array(string) tryme, string lang]) {
-				//I think this is sometimes getting an array of localised names
-				//(possibly including a capital name??). Should we pick one, or
-				//search all?
-				if (arrayp(tryme)) tryme = tryme[0];
-				string folded = lower_case(tryme); //TODO: Fold to ASCII for the search
-				int pos = search(folded, term);
-				if (pos == -1) continue;
-				int end = pos + sizeof(term);
-				string before = tryme[..pos-1], match = tryme[pos..end-1], after = tryme[end..];
-				if (lang != "") {before = prov->name + " (" + lang + ": " + before; after += ")";}
-				results += ({({(int)(id - "-"), before, match, after})});
-				order += ({folded}); //Is it better to sort by the folded or by the tryme?
-				break;
-			}
-			if (sizeof(results) >= 25) break;
-		}
-		if (sizeof(results) < 25) foreach (sort(indices(ret->countries)), string t) {
-			string tryme = ret->countries[t]->name + " (" + t + ")";
-			string folded = lower_case(tryme); //TODO: As above. Also, dedup if possible.
-			int pos = search(folded, term);
-			if (pos == -1) continue;
-			int end = pos + sizeof(term);
-			string before = tryme[..pos-1], match = tryme[pos..end-1], after = tryme[end..];
-			results += ({({t, before, match, after})});
-			order += ({folded});
-			if (sizeof(results) >= 25) break;
-		}
-	}
-	sort(order, results); //Sort by name for the actual results. So if it's truncated to 25, it'll be the first 25 by (string)id, but they'll be in name order.
-	ret->search = (["term": term, "results": results]);
-
-	//Scan all provinces for whether you've discovered them or not
-	//Deprecated in favour of the province_info[] mapping
-	mapping discov = ret->discovered_provinces = ([]);
-	foreach (data->provinces; string id; mapping prov) if (has_value(Array.arrayify(prov->discovered_by), tag)) discov[id - "-"] = 1;
-
-	return ret;
-}
+/* @export: */ array get_savefile_info() {return ({last_parsed_savefile, recent_peace_treaties});}
 
 mapping(string:array|string|object) icons = ([]);
 array|string text_with_icons(string text) {
@@ -2769,7 +2331,7 @@ array|string text_with_icons(string text) {
 			foreach (img, string fn) allfn += ({fn, replace(fn, ".dds", ".tga"), replace(fn, ".tga", ".dds")});
 			img = Array.uniq(allfn);
 			foreach (img, string fn) {
-				object|mapping png = load_image(PROGRAM_PATH + "/" + fn);
+				object|mapping png = G->parser->load_image(PROGRAM_PATH + "/" + fn);
 				if (mappingp(png)) png = png->image;
 				if (!png) continue;
 				img = "data:image/png;base64," + MIME.encode_base64(Image.PNG.encode(png), 1);
@@ -2879,12 +2441,7 @@ void watch_game_log(object inot) {
 				//TODO: Record bankruptcies and when they'll expire (five years later)
 				werror("\e[1;33mBANKRUPT:\e[0m %s (%d %s %d)\n", country, day, mon, year);
 			}
-			if (sizeof(sendme) > 1) {
-				string msg = Standards.JSON.encode(sendme);
-				foreach (websocket_groups;; array socks)
-					foreach (socks, object sock)
-						if (sock && sock->state == 1) sock->send_text(msg);
-			}
+			if (sizeof(sendme) > 1) G->webserver->send_to_all(sendme);
 		}
 	}
 	parse();
@@ -2922,6 +2479,12 @@ int main(int argc, array(string) argv) {
 		write("Parse successful. Date: %s\n", data->date);
 		return 0;
 	}
+
+	add_constant("G", this);
+	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
+	add_constant("get_savefile_info", get_savefile_info);
+	G->webserver = compile_file("webserver.pike")("webserver");
+	G->parser = compile_file("parser.pike")("parser");
 
 	//Load up some info that is presumed to not change. If you're tweaking a game mod, this may break.
 	//In general, if you've made any change that could affect things, restart the parser to force it
@@ -3129,7 +2692,7 @@ int main(int argc, array(string) argv) {
 	imperial_reforms = parse_config_dir("/common/imperial_reforms");
 	cb_types = parse_config_dir("/common/cb_types");
 	wargoal_types = parse_config_dir("/common/wargoal_types");
-	custom_country_colors = parse_config_dir("/common/custom_country_colors");
+	G->webserver->custom_country_colors = parse_config_dir("/common/custom_country_colors");
 	//estate_agendas = parse_config_dir("/common/estate_agendas"); //Not currently in use
 	country_decisions = parse_config_dir("/decisions", "country_decisions");
 	country_missions = ([]);
@@ -3330,8 +2893,8 @@ log = \"PROV-TERRAIN-END\"
 
 	mapping cfg = ([]);
 	catch {cfg = Standards.JSON.decode(Stdio.read_file(".eu4_preferences.json"));};
-	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
-	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
+	if (mappingp(cfg) && cfg->tag_preferences) G->webserver->tag_preferences = cfg->tag_preferences;
+	if (mappingp(cfg) && cfg->effect_display_mode) G->webserver->effect_display_mode = cfg->effect_display_mode;
 
 	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
@@ -3365,6 +2928,5 @@ log = \"PROV-TERRAIN-END\"
 	inot->set_nonblocking();
 	Stdio.Port mainsock = Stdio.Port();
 	mainsock->bind(1444, sock_connected, "::", 1);
-	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");
 	return -1;
 }
