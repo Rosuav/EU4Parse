@@ -196,7 +196,13 @@ Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
 //The current instance of this class is available as G->CFG
 class GameConfig {
 	//Everything in this class affects the EU4 checksum. Mods can change the underlying
-	//files parsed into this data.
+	//files parsed into this data. It may be of value to cache these objects (it takes
+	//about 3-4 seconds to do the full parse), but maybe only in memory, not in JSON.
+	//If such a cache is created, it should also reference the game version somehow.
+	//A save file has a 'checksum' attribute, but how do we know what matches that?
+	//Maybe what we should do is build our own checksum based on the same files that the
+	//game does, as listed in checksum_manifest.txt? It wouldn't matter if the hash isn't
+	//the same as the game's one, as long as it changes whenever the game's hash changes.
 	string active_mods; //Comma-separated signature string of all active mods. Might need game version too?
 	array config_dirs = ({G->PROGRAM_PATH});
 	mapping icons = ([]), textcolors;
