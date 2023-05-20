@@ -1,6 +1,4 @@
 //HTTP handler including WebSockets
-mapping custom_country_colors;
-
 mapping(string:array(object)) websocket_groups = ([]);
 mapping respond(Protocols.HTTP.Server.Request req) {
 	mapping mimetype = (["eu4_parse.js": "text/javascript", "eu4_parse.css": "text/css"]);
@@ -46,9 +44,9 @@ let ws_sync = null; import('https://sikorsky.rosuav.com/static/ws_sync.js').then
 			int bgx = 128 * (flag % 10), bgy = 128 * (flag / 10);
 			int symx = 64 * (symbol % 32), symy = 64 * (symbol / 32);
 			img = backgrounds->copy(bgx, bgy, bgx + 127, bgy + 127)
-				->change_color(255, 0, 0, @(array(int))custom_country_colors->flag_color[color1])
-				->change_color(0, 255, 0, @(array(int))custom_country_colors->flag_color[color2])
-				->change_color(0, 0, 255, @(array(int))custom_country_colors->flag_color[color3])
+				->change_color(255, 0, 0, @(array(int))G->CFG->custom_country_colors->flag_color[color1])
+				->change_color(0, 255, 0, @(array(int))G->CFG->custom_country_colors->flag_color[color2])
+				->change_color(0, 0, 255, @(array(int))G->CFG->custom_country_colors->flag_color[color3])
 				->paste_mask(
 					symbols->image->copy(symx, symy, symx + 63, symy + 63),
 					symbols->alpha->copy(symx, symy, symx + 63, symy + 63),
@@ -179,7 +177,7 @@ void websocket_cmd_listcustoms(mapping conn, mapping data) {
 		"nations": nations,
 		"custom_ideas": G->custom_ideas,
 		"effect_display_mode": effect_display_mode,
-		"map_colors": custom_country_colors->color,
+		"map_colors": G->CFG->custom_country_colors->color,
 	]));
 }
 
@@ -296,19 +294,19 @@ mapping get_state(string group) {
 	mapping available = ([]);
 	mapping tech = country->technology;
 	int have_mfg = 0;
-	foreach (G->building_types; string id; mapping bldg) {
+	foreach (G->CFG->building_types; string id; mapping bldg) {
 		[string techtype, int techlevel] = bldg->tech_required || ({"", 100}); //Ignore anything that's not a regular building
 		if ((int)tech[techtype] < techlevel) continue; //Hide IDs you don't have the tech to build
 		if (bldg->manufactory && !bldg->show_separate) {have_mfg = 1; continue;} //Collect regular manufactories under one name
 		if (bldg->influencing_fort) continue; //You won't want to check forts this way
 		available[id] = ([
-			"id": id, "name": G->L10n["building_" + id],
+			"id": id, "name": L10N("building_" + id),
 			"cost": bldg->manufactory ? 500 : (int)bldg->cost,
 			"raw": bldg,
 		]);
 	}
 	//Restrict to only those buildings for which you don't have an upgrade available
-	foreach (indices(available), string id) if (available[G->building_types[id]->obsoleted_by]) m_delete(available, id);
+	foreach (indices(available), string id) if (available[G->CFG->building_types[id]->obsoleted_by]) m_delete(available, id);
 	if (have_mfg) available->manufactory = ([ //Note that building_types->manufactory is technically valid
 		"id": "manufactory", "name": "Manufactory (standard)",
 		"cost": 500,
@@ -326,7 +324,7 @@ mapping get_state(string group) {
 	if (term != "") {
 		foreach (sort(indices(data->provinces)), string id) { //Sort by ID for consistency
 			mapping prov = data->provinces[id];
-			foreach (({({prov->name, ""})}) + (G->province_localised_names[id - "-"]||({ })), [string|array(string) tryme, string lang]) {
+			foreach (({({prov->name, ""})}) + (G->CFG->province_localised_names[id - "-"]||({ })), [string|array(string) tryme, string lang]) {
 				//I think this is sometimes getting an array of localised names
 				//(possibly including a capital name??). Should we pick one, or
 				//search all?

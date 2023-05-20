@@ -40,214 +40,11 @@ constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"
 
 mapping G = ([]);
 
-#ifdef QUIET
-//Run "pike -DQUIET eu4_parse.pike ...." to avoid warnings from the LR Parser module. Obviously,
-//parsing save files won't work in that form.
-object parser;
-#else
-Parser.LR.Parser parser = Parser.LR.GrammarParser.make_parser_from_file("eu4_parse.grammar");
-#endif
-
-int retain_map_indices = 0;
-class maparray {
-	//Hybrid mapping/array. Can have key-value pairs with string keys, and also an array
-	//of values, indexed numerically.
-	mapping keyed = ([]);
-	array indexed = ({ });
-	multiset _is_auto_array = (<>);
-	object addkey(string key, mixed value) {
-		//HACK: Track country order even though the rest of the file isn't tracked that way
-		//If Pike had an order-retaining mapping, this would be unnecessary. Hmm.
-		//The main issue is that it MUST be cacheable. Maybe, instead of retaining map indices
-		//like this, retain an extra key with the iteration order?
-		if (key == "---" && !retain_map_indices) retain_map_indices = 2;
-		if (key == "countries" && retain_map_indices == 2) retain_map_indices = 0;
-		if (retain_map_indices && mappingp(value)) value |= (["_index": sizeof(keyed)]);
-		keyed[key] = value;
-		return this;
-	}
-	object addidx(mixed value) {indexed += ({value}); return this;}
-	protected int _sizeof() {return sizeof(keyed) + sizeof(indexed);}
-	protected mixed `[](string|int key) {return intp(key) ? indexed[key] : keyed[key];}
-	protected mixed `[]=(string key, mixed val) {return keyed[key] = val;}
-	protected mixed `->(string key) {
-		switch (key) {
-			case "keyed": return keyed;
-			case "indexed": return indexed;
-			case "addkey": return addkey;
-			case "addidx": return addidx;
-			case "_is_auto_array": return _is_auto_array;
-			default: return keyed[key];
-		}
-	}
-	protected string _sprintf(int type, mapping p) {return sprintf("<%*O/%*O>", p, keyed, p, indexed);}
-	//Enable foreach(maparray();int i;mixed val) - but not, unfortunately, foreach(maparray,mixed val)
-	protected Array.Iterator _get_iterator() {return get_iterator(indexed);}
-	string encode_json(int flags, int indent) {
-		//Only used if there's a hybrid maparray in the savefile (not in other files that don't
-		//get cached in JSON) that can't be coalesced. Discard the indexed part.
-		return Standards.JSON.encode(keyed, flags);
-	}
-}
-
-mapping|array|maparray coalesce(mixed ret_or_brace, mixed ret) {
-	if (ret_or_brace != "{") ret = ret_or_brace;
-	//Where possible, simplify a maparray down to just a map or an array
-	if (!sizeof(ret->indexed)) return ret->keyed;
-	if (!sizeof(ret->keyed)) return ret->indexed;
-	//Sometimes there's a mapping, but it also has an array of empty mappings after it.
-	if (Array.all(ret->indexed, mappingp) && !Array.any(ret->indexed, sizeof)) return ret->keyed;
-	return ret;
-}
-maparray makemapping(mixed name, mixed _, mixed val) {return maparray()->addkey(name, val);}
-maparray addmapping(maparray map, mixed name, mixed _, mixed val) {
-	//Note that, sometimes, an array is defined by simply assigning multiple times.
-	//To properly handle arrays of arrays, we keep track of every key for which such
-	//auto-collection has been done.
-	if (map->_is_auto_array[name]) map[name] += ({val});
-	else if (map[name]) {map[name] = ({map[name], val}); map->_is_auto_array[name] = 1;}
-	else map->addkey(name, val);
-	return map;
-}
-maparray makearray(mixed val) {return maparray()->addidx(val);}
-maparray addarray(maparray arr, mixed val) {return arr->addidx(val);}
-mapping emptymaparray() {return ([]);}
-
 object progress_pipe;
 constant PARSE_PROGRESS_FRACTION = 20; //Report at 1/20, 2/20, 3/20 etc of progress
-//TODO: Move into parser.pike and also rename since it does everything, not just save files
-mapping low_parse_savefile(string|Stdio.Buffer data, int|void verbose) {
-	if (stringp(data)) data = Stdio.Buffer(data); //NOTE: Restricted to eight-bit data. Since EU4 uses ISO-8859-1, that's not a problem. Be aware for future.
-	data->read_only();
-	string ungetch;
-	int totsize = sizeof(data), fraction = totsize / PARSE_PROGRESS_FRACTION, nextmark = totsize - fraction;
-	string|array next() {
-		int progress = sizeof(data);
-		if (progress_pipe && progress < nextmark) {nextmark -= fraction; progress_pipe->write("+");}
-		if (string ret = ungetch) {ungetch = 0; return ret;}
-		data->sscanf("%*[ \t\r\n]");
-		while (data->sscanf( "#%*s\n%*[ \t\r\n]")); //Strip comments
-		if (!sizeof(data)) return "";
-		if (array str = data->sscanf("\"%[^\"]\"")) {
-			//Fairly naive handling of backslashes and quotes. It might be better to do this more properly.
-			string lit = str[0];
-			while (lit != "" && lit[-1] == '\\') {
-				str = data->sscanf("%[^\"]\"");
-				if (!str) break; //Should possibly be a parse error?
-				lit += "\"" + str[0];
-			}
-			return ({"string", replace(lit, "\\\\", "\\")});
-		}
-		if (array digits = data->sscanf("%[-0-9.]")) {
-			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
-			return ({"string", digits[0]});
-		}
-		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:]")) { //Include non-ASCII characters as letters
-			word = word[0];
-			//Unquoted tokens like institution_events.2 should be atoms, not atom-followed-by-number
-			if (array dotnumber = data->sscanf(".%[0-9]")) word += "." + dotnumber[0];
-			//Hyphenated mapping keys like maidan-e_naqsh-e_jahan should also be atoms.
-			while (array hyphenated = data->sscanf("-%[0-9a-zA-Z_'\x81-\xFF:]"))
-				word += "-" + hyphenated[0];
-			if ((<"yes", "no">)[word]) return ({"boolean", word == "yes"});
-			//Hack: this one element seems to omit the equals sign for some reason.
-			if (word == "map_area_data") ungetch = "=";
-			return ({"string", word});
-		}
-		return data->read(1);
-	}
-	string|array shownext() {mixed tok = next(); write("%O\n", tok); return tok;}
-	//while (shownext() != ""); return 0; //Dump tokens w/o parsing
-	return parser->parse(verbose ? shownext : next, this);
-}
+object CFG;
 
-//File-like object that reads from a string. Potentially does a lot of string copying.
-class StringFile(string basis) {
-	int pos = 0;
-	int seek(int offset, string|void whence) {
-		switch (whence) {
-			case Stdio.SEEK_SET: pos = offset; break;
-			case Stdio.SEEK_CUR: pos += offset; break;
-			case Stdio.SEEK_END: pos = sizeof(basis) + offset; break;
-			case 0: pos = offset + sizeof(basis) * (offset < 0); break; //Default is SEEK_END if negative, else SEEK_SET
-		}
-		return pos;
-	}
-	int tell() {return pos;}
-	string(8bit) read(int len) {
-		string ret = basis[pos..pos+len-1];
-		pos += len;
-		return ret;
-	}
-	void stat() { } //No file system stats available.
-}
-
-mapping parse_savefile_string(string data, string|void filename) {
-	if (has_prefix(data, "PK\3\4")) {
-		//Compressed savefile. Consists of three files, one of which ("ai") we don't care
-		//about. The other two can be concatenated after stripping their "EU4txt" headers,
-		//and should be able to be parsed just like an uncompressed save. (The ai file is
-		//also the exact same format, so if it's ever needed, just add a third sscanf.)
-		object zip = Filesystem.Zip._Zip(StringFile(data));
-		sscanf(zip->read("meta") || "", "EU4txt%s", string meta);
-		sscanf(zip->read("gamestate") || "", "EU4txt%s", string state);
-		if (meta && state) data = meta + state; else return 0;
-	}
-	else if (!sscanf(data, "EU4txt%s", data)) return 0;
-	if (filename) write("Reading save file %s (%d bytes)...\n", filename, sizeof(data));
-	return low_parse_savefile(data);
-}
-
-mapping parse_savefile(string data, string|void filename) {
-	sscanf(Crypto.SHA256.hash(data), "%32c", int hash);
-	string hexhash = sprintf("%64x", hash);
-	mapping cache = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}");
-	if (cache->hash == hexhash) return cache->data;
-	mapping ret = parse_savefile_string(data, filename);
-	if (!ret) return 0; //Probably an Ironman save (binary format, can't be parsed by this system).
-	foreach (ret->countries; string tag; mapping c) {
-		c->tag = tag; //When looking at a country, it's often convenient to know its tag (reverse linkage).
-		c->owned_provinces = Array.arrayify(c->owned_provinces); //Several things will crash if you don't have a provinces array
-	}
-	foreach (ret->provinces; string id; mapping prov) prov->id = -(int)id;
-	Stdio.write_file("eu4_parse.json", string_to_utf8(Standards.JSON.encode((["hash": hexhash, "data": ret]))));
-	return ret;
-}
-
-string currently_loaded_mods = ""; array config_dirs = ({PROGRAM_PATH});
-//Parse a full directory of configs and merge them into one mapping
-//The specified directory name should not end with a slash.
-//If key is provided, will return only that key from each file.
-array gather_config_dir(string dir, string|void key) {
-	array ret = ({([])}); //Ensure that we at least have an empty mapping even if no config files
-	//A mod can add more files, or can replace entire files (but not parts of a file).
-	//Files are then processed in affabeck regardless of their paths (I think that's how the game does it).
-	mapping files = ([]);
-	foreach (config_dirs, string base)
-		foreach (sort(get_dir(base + dir) || ({ })), string fn)
-			files[fn] = base + dir + "/" + fn;
-	array filenames = indices(files); sort(lower_case(filenames[*]), filenames); //Sort case insensitively? I think this is how it's to be done?
-	foreach (filenames, string fn) {
-		string data = Stdio.read_file(files[fn]) + "\n";
-		if (fn == "DOM_Spain_Missions.txt") data += "}\n"; //HACK: As of 20230419, this file is missing a final close brace.
-		mapping cur = low_parse_savefile(data) || ([]);
-		if (key) cur = cur[key] || ([]);
-		ret += ({cur});
-	}
-	return ret;
-}
-mapping parse_config_dir(string dir, string|void key) {return `|(@gather_config_dir(dir, key));}
-
-mapping(string:string) L10n, province_localised_names;
-void parse_localisation(string data) {
-	array lines = utf8_to_string("#" + data) / "\n"; //Hack: Pretend that the heading line is a comment
-	foreach (lines, string line) {
-		sscanf(line, "%s#", line);
-		sscanf(line, " %s:%*d \"%s\"", string key, string val);
-		if (key && val) L10n[key] = val;
-	}
-}
-string L10N(string key) {return L10n[key] || key;}
+string L10N(string key) {return CFG->L10n[key] || key;}
 
 string tabulate(array(string) headings, array(array(mixed)) data, string|void gutter, int|void summary) {
 	if (!gutter) gutter = " ";
@@ -278,9 +75,7 @@ void interesting(string id, int|void prio) {
 	if (!has_value(interesting_province, id)) interesting_province += ({id}); //Retain order but avoid duplicates
 }
 
-mapping prov_area = ([]), map_areas = ([]), prov_colonial_region = ([]);
 mapping province_info;
-mapping building_types; array building_id;
 mapping building_slots = ([]);
 void analyze_cot(mapping data, string name, string tag, function|mapping write) {
 	mapping country = data->countries[tag];
@@ -293,9 +88,9 @@ void analyze_cot(mapping data, string name, string tag, function|mapping write) 
 		int need = prov->center_of_trade == "1" ? 10 : 25;
 		array desc = ({
 			sprintf("%s %04d %s", prov->owner, 9999-dev, prov->name), //Sort key
-			prov->center_of_trade, id, dev, prov->name, L10n[prov->trade] || prov->trade,
+			prov->center_of_trade, id, dev, prov->name, L10N(prov->trade),
 		});
-		if (prov->center_of_trade == "3") {maxlvl += ({desc}); area_has_level3[prov_area[id]] = (int)id;}
+		if (prov->center_of_trade == "3") {maxlvl += ({desc}); area_has_level3[CFG->prov_area[id]] = (int)id;}
 		else if (dev >= need) upgradeable += ({desc});
 		else developable += ({desc});
 	}
@@ -307,11 +102,11 @@ void analyze_cot(mapping data, string name, string tag, function|mapping write) 
 		//Colorize if it's interesting. It can't be upgraded if not in a state; also, not all level 2s
 		//can become level 3s, for various reasons.
 		[string key, string cotlevel, string id, int dev, string provname, string tradenode] = info;
-		array have_states = data->map_area_data[prov_area[id]]->?state->?country_state->?country;
+		array have_states = data->map_area_data[CFG->prov_area[id]]->?state->?country_state->?country;
 		string noupgrade;
 		if (!have_states || !has_value(have_states, tag)) noupgrade = "is territory";
 		else if (cotlevel == "2") {
-			if (area_has_level3[prov_area[id]]) noupgrade = "other l3 in area";
+			if (area_has_level3[CFG->prov_area[id]]) noupgrade = "other l3 in area";
 			else if (++level3 > maxlevel3) noupgrade = "need merchants";
 		}
 		if (!noupgrade) {interesting(id, prio); maxprio = max(prio, maxprio);}
@@ -388,7 +183,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			//country is in, and then seeing if that's equal to value, we look up the
 			//list of religions in the group specified, and ask if the country's is in
 			//that list.
-			return !undefinedp(religion_definitions[value][scope->religion]);
+			return !undefinedp(CFG->religion_definitions[value][scope->religion]);
 		//case "dominant_religion": //TODO
 		case "technology_group": return scope->technology_group == value;
 		case "has_country_modifier": case "has_ruler_modifier":
@@ -400,7 +195,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return dev >= (int)value;
 		}
 		case "province_has_center_of_trade_of_level": return (int)scope->center_of_trade >= (int)value;
-		case "area": return prov_area[(string)scope->id] == value;
+		case "area": return CFG->prov_area[(string)scope->id] == value;
 		//Possibly universal scope
 		case "has_global_flag": return !undefinedp(data->flags[value]);
 		default: return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
@@ -408,18 +203,11 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 	
 }
 
-mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
-mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
-mapping cot_definitions, state_edicts, terrain_definitions, imperial_reforms;
-mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
-mapping tradenode_definitions, great_projects;
-mapping advisor_definitions, religion_definitions, unit_definitions, culture_definitions;
-array military_tech_levels, tradenode_upstream_order, custom_ideas;
 //List all ideas (including national) that are active
 array(mapping) enumerate_ideas(mapping idea_groups) {
 	array ret = ({ });
 	foreach (idea_groups; string grp; string numtaken) {
-		mapping group = idea_definitions[grp]; if (!group) continue;
+		mapping group = CFG->idea_definitions[grp]; if (!group) continue;
 		ret += ({group->start}) + group->ideas[..(int)numtaken - 1];
 		if (numtaken == "7") ret += ({group->bonus});
 	}
@@ -450,9 +238,8 @@ void _incorporate(mapping data, mapping modifiers, string source, mapping effect
 }
 void _incorporate_all(mapping data, mapping modifiers, string source, mapping definitions, array keys, int|void mul, int|void div) {
 	foreach (Array.arrayify(keys), string key)
-		_incorporate(data, modifiers, sprintf("%s %O", source, L10n[key] || key), definitions[key], mul, div);
+		_incorporate(data, modifiers, sprintf("%s %O", source, L10N(key)), definitions[key], mul, div);
 }
-mapping estate_definitions = ([]), estate_privilege_definitions = ([]);
 mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (mapping cached = country->all_country_modifiers) return cached;
 	mapping modifiers = (["_sources": ([])]);
@@ -484,28 +271,28 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		//which is a simple multiplier on the effect. Conveniently, we already have
 		//a way to multiply the effects of things!
 		foreach (ideaids, mapping idea) {
-			mapping defn = custom_ideas[(int)idea->index];
+			mapping defn = CFG->custom_ideas[(int)idea->index];
 			_incorporate(data, modifiers, "Custom idea - " + L10N(defn->id), defn, (int)idea->level, 1);
 		}
 	}
-	_incorporate_all(data, modifiers, "Policy", policy_definitions, Array.arrayify(country->active_policy)->policy);
-	_incorporate_all(data, modifiers, "Reform", reform_definitions, country->government->reform_stack->reforms);
-	array tradebonus = trade_goods[((array(int))Array.arrayify(country->traded_bonus))[*]];
+	_incorporate_all(data, modifiers, "Policy", CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
+	_incorporate_all(data, modifiers, "Reform", CFG->reform_definitions, country->government->reform_stack->reforms);
+	array tradebonus = CFG->trade_goods[((array(int))Array.arrayify(country->traded_bonus))[*]];
 	_incorporate(data, modifiers, ("Trading in " + tradebonus->id[*])[*], tradebonus[*]); //TODO: TEST ME
-	_incorporate_all(data, modifiers, "Modifier", country_modifiers, Array.arrayify(country->modifier)->modifier);
-	mapping age = age_definitions[data->current_age]->abilities;
+	_incorporate_all(data, modifiers, "Modifier", CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
+	mapping age = CFG->age_definitions[data->current_age]->abilities;
 	_incorporate(data, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
 	mapping tech = country->technology || ([]);
 	sscanf(data->date, "%d.%d.%d", int year, int mon, int day);
 	foreach ("adm dip mil" / " ", string cat) {
 		int level = (int)tech[cat + "_tech"];
 		string desc = String.capitalize(cat) + " tech";
-		_incorporate_all(data, modifiers, desc, tech_definitions[cat]->technology, enumerate(level));
-		if ((int)tech_definitions[cat]->technology[level]->year > year)
-			_incorporate(data, modifiers, "Ahead of time in " + desc, tech_definitions[cat]->ahead_of_time);
+		_incorporate_all(data, modifiers, desc, CFG->tech_definitions[cat]->technology, enumerate(level));
+		if ((int)CFG->tech_definitions[cat]->technology[level]->year > year)
+			_incorporate(data, modifiers, "Ahead of time in " + desc, CFG->tech_definitions[cat]->ahead_of_time);
 		//TODO: > or >= ?
 	}
-	if (array have = country->institutions) foreach (institutions; string id; mapping inst) {
+	if (array have = country->institutions) foreach (CFG->institutions; string id; mapping inst) {
 		if (have[inst->_index] == "1") _incorporate(data, modifiers, "Institution", inst->bonus);
 	}
 	//More modifier types to incorporate:
@@ -516,9 +303,9 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	//- Being a trade league leader (scaled by the number of members)
 	//- Stability
 
-	if (country->luck) _incorporate(data, modifiers, "Luck", static_modifiers->luck); //Lucky nations (AI-only) get bonuses.
-	if (int innov = threeplace(country->innovativeness)) _incorporate(data, modifiers, "Innovativeness", static_modifiers->innovativeness, innov, 100000);
-	if (int corr = threeplace(country->corruption)) _incorporate(data, modifiers, "Corruption", static_modifiers->corruption, corr, 100000);
+	if (country->luck) _incorporate(data, modifiers, "Luck", CFG->static_modifiers->luck); //Lucky nations (AI-only) get bonuses.
+	if (int innov = threeplace(country->innovativeness)) _incorporate(data, modifiers, "Innovativeness", CFG->static_modifiers->innovativeness, innov, 100000);
+	if (int corr = threeplace(country->corruption)) _incorporate(data, modifiers, "Corruption", CFG->static_modifiers->corruption, corr, 100000);
 	//Having gone through all of the above, we should now have estate influence modifiers.
 	//Now we can calculate the total influence, and then add in the effects of each estate.
 	if (country->estate) {
@@ -528,21 +315,21 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		country->estate = Array.arrayify(country->estate); //In case there's only one estate
 		foreach (country->estate, mapping estate) {
 			foreach (Array.arrayify(estate->granted_privileges), [string priv, string date]) {
-				mapping privilege = estate_privilege_definitions[priv]; if (!privilege) continue;
-				string desc = sprintf("%s: %s", L10n[estate->type] || estate->type, L10n[priv] || priv);
+				mapping privilege = CFG->estate_privilege_definitions[priv]; if (!privilege) continue;
+				string desc = sprintf("%s: %s", L10N(estate->type), L10N(priv));
 				_incorporate(data, modifiers, desc, privilege->penalties);
 				_incorporate(data, modifiers, desc, privilege->benefits);
 			}
 		}
 		//Now calculate the influence and loyalty of each estate, and the resulting effects.
 		foreach (country->estate, mapping estate) {
-			mapping estate_defn = estate_definitions[estate->type];
+			mapping estate_defn = CFG->estate_definitions[estate->type];
 			if (!estate_defn) continue;
 			mapping influence = (["Base": (int)estate_defn->base_influence * 1000]);
 			//There are some conditional modifiers. Sigh. This is seriously complicated. Why can't estate influence just be in the savefile?
 			foreach (Array.arrayify(estate->granted_privileges), [string priv, string date])
 				influence["Privilege " + L10N(priv)] =
-					threeplace(estate_privilege_definitions[priv]->?influence) * 100;
+					threeplace(CFG->estate_privilege_definitions[priv]->?influence) * 100;
 			foreach (Array.arrayify(estate->influence_modifier), mapping mod)
 				//It's possible to have the same modifier more than once (eg "Diet Summoned").
 				//Rather than show them all separately, collapse them into "Diet Summoned: 15%".
@@ -565,7 +352,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 			if (total_influence < 60000) mul = 3;
 			if (total_influence < 40000) mul = 2;
 			if (total_influence < 20000) mul = 1;
-			_incorporate(data, modifiers, String.capitalize(opinion) + " " + L10n[estate->type], estate_defn["country_modifier_" + opinion], mul, 4);
+			_incorporate(data, modifiers, String.capitalize(opinion) + " " + L10N(estate->type), estate_defn["country_modifier_" + opinion], mul, 4);
 		}
 	}
 	//To figure out what advisors you have hired, we first need to find all advisors.
@@ -582,7 +369,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	}
 	foreach (Array.arrayify(country->advisor), mapping adv) {
 		adv = advisors[adv->id]; if (!adv) continue;
-		mapping type = advisor_definitions[adv->type];
+		mapping type = CFG->advisor_definitions[adv->type];
 		_incorporate(data, modifiers, L10N(adv->type) + " (" + adv->name + ")", type);
 	}
 	return country->all_country_modifiers = modifiers;
@@ -595,28 +382,28 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	mapping modifiers = (["_sources": ([])]);
 	if (prov->center_of_trade) {
 		string type = province_info[(string)id]->?has_port ? "coastal" : "inland";
-		mapping cot = cot_definitions[type + prov->center_of_trade];
+		mapping cot = CFG->cot_definitions[type + prov->center_of_trade];
 		_incorporate(data, modifiers, "Level " + prov->center_of_trade + " COT", cot->?province_modifiers);
 	}
-	if (int l3cot = country->area_has_level3[?prov_area[(string)id]]) {
+	if (int l3cot = country->area_has_level3[?CFG->prov_area[(string)id]]) {
 		string type = province_info[(string)l3cot]->?has_port ? "coastal3" : "inland3";
-		mapping cot = cot_definitions[type];
+		mapping cot = CFG->cot_definitions[type];
 		_incorporate(data, modifiers, "L3 COT in area", cot->?state_modifiers);
 	}
 	foreach (prov->buildings || ([]); string b;)
-		_incorporate(data, modifiers, "Building", building_types[b]);
-	mapping area = data->map_area_data[prov_area[(string)id]]->?state;
+		_incorporate(data, modifiers, "Building", CFG->building_types[b]);
+	mapping area = data->map_area_data[CFG->prov_area[(string)id]]->?state;
 	foreach (Array.arrayify(area->?country_state), mapping state) if (state->country == prov->owner) {
-		if (state->prosperity == "100.000") _incorporate(data, modifiers, "Prosperity", static_modifiers->prosperity);
-		_incorporate(data, modifiers, "State edict - " + L10N(state->active_edict->?which), state_edicts[state->active_edict->?which]);
+		if (state->prosperity == "100.000") _incorporate(data, modifiers, "Prosperity", CFG->static_modifiers->prosperity);
+		_incorporate(data, modifiers, "State edict - " + L10N(state->active_edict->?which), CFG->state_edicts[state->active_edict->?which]);
 	}
-	_incorporate(data, modifiers, "Terrain", terrain_definitions->categories[province_info[(string)id]->terrain]);
-	_incorporate(data, modifiers, "Climate", static_modifiers[province_info[(string)id]->climate]);
+	_incorporate(data, modifiers, "Terrain", CFG->terrain_definitions->categories[province_info[(string)id]->terrain]);
+	_incorporate(data, modifiers, "Climate", CFG->static_modifiers[province_info[(string)id]->climate]);
 	if (prov->hre) {
 		foreach (Array.arrayify(data->empire->passed_reform), string reform)
-			_incorporate(data, modifiers, "HRE province (" + L10N(reform) + ")", imperial_reforms[reform]->?province);
+			_incorporate(data, modifiers, "HRE province (" + L10N(reform) + ")", CFG->imperial_reforms[reform]->?province);
 	}
-	_incorporate(data, modifiers, "Trade good: " + prov->trade_goods, trade_goods[prov->trade_goods]->?province);
+	_incorporate(data, modifiers, "Trade good: " + prov->trade_goods, CFG->trade_goods[prov->trade_goods]->?province);
 	return prov->all_province_modifiers = modifiers;
 }
 
@@ -650,7 +437,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 	if (religion != country->religion) religion = "n/a";
 	array accepted_cultures = ({country->primary_culture}) + Array.arrayify(country->accepted_culture);
 	if (country->government_rank == "3") //Empire rank, all in culture group are accepted
-		foreach (culture_definitions; string group; mapping info)
+		foreach (CFG->culture_definitions; string group; mapping info)
 			if (info[country->primary_culture]) accepted_cultures += indices(info);
 
 	//Some two-part checks can also be described in one part. Fold them together.
@@ -665,7 +452,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 		switch (type) {
 			case "province_is_or_accepts_religion_group": {
 				//If multiple, it's gonna be "OR" mode, otherwise it could never be true
-				mapping accepted = `+(@religion_definitions[need->religion_group[*]]);
+				mapping accepted = `+(@CFG->religion_definitions[need->religion_group[*]]);
 				//If it says "Christian or Muslim" and you're Catholic, it will just say "Catholic"
 				if (accepted[religion]) ret += ({({L10N(religion), 1})});
 				//If it says "Christian" and you're Catholic but the province is Protestant, it will say "Christian" but type 2
@@ -691,7 +478,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 				]), prov, country, 1)});
 				break;
 			case "culture_group":
-				if (has_value(`+(@indices(culture_definitions[need[*]][*])), prov->culture)
+				if (has_value(`+(@indices(CFG->culture_definitions[need[*]][*])), prov->culture)
 						&& has_value(accepted_cultures, prov->culture))
 					ret += ({({L10N(prov->culture), 1})});
 				else ret += ({({L10N(need[*]) * " / ", 2})});
@@ -719,7 +506,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 					]), prov, country, 1)});
 					break;
 				//Otherwise, render the tooltip itself.
-				default: ret += ({({L10n[need[0]->tooltip], 3})});
+				default: ret += ({({L10N(need[0]->tooltip), 3})});
 			}
 			break;
 			case "OR": ret += describe_requirements(need[*], prov, country, 1); break;
@@ -748,7 +535,7 @@ void analyze_leviathans(mapping data, string name, string tag, function|mapping 
 		mapping con = prov->great_project_construction || ([]);
 		foreach (prov->great_projects, string project) {
 			mapping proj = data->great_projects[project] || (["development_tier": "0"]); //Weirdly, I have once seen a project that's just missing from the file.
-			mapping defn = great_projects[project];
+			mapping defn = CFG->great_projects[project];
 			//TODO: Parse out defn->can_use_modifiers_trigger and determine:
 			//1) Religion-locked (list religions and/or groups that are acceptable)
 			//   "province_is_or_accepts_religion_group", "province_is_buddhist_or_accepts_buddhism", "province_is_buddhist_or_accepts_buddhism_or_is_dharmic"
@@ -765,7 +552,7 @@ void analyze_leviathans(mapping data, string name, string tag, function|mapping 
 				//Sort key
 				(int)id - (int)proj->development_tier * 10000,
 				//Legacy: preformatted table data
-				({"", id, "Lvl " + proj->development_tier, prov->name, L10n[project] || "#" + project,
+				({"", id, "Lvl " + proj->development_tier, prov->name, CFG->L10n[project] || "#" + project,
 					con->great_projects != project ? "" : //If you're upgrading a different great project in this province, leave this one blank (you can't upgrade two at once)
 					sprintf("%s%d%%, due %s",
 						con->type == "2" ? "Moving: " : "", //Upgrades are con->type "1", moving to capital is type "2"
@@ -811,7 +598,7 @@ void analyze_leviathans(mapping data, string name, string tag, function|mapping 
 	write("\nFavors:\n");
 	foreach (data->countries; string other; mapping c) {
 		int favors = threeplace(c->active_relations[tag]->?favors);
-		if (favors > 1000) write("%s owes you %d.%03d\n", c->name || L10n[other] || other, favors / 1000, favors % 1000);
+		if (favors > 1000) write("%s owes you %d.%03d\n", c->name || L10N(other), favors / 1000, favors % 1000);
 	}
 	write("%s\n", string_to_utf8(tabulate(({"", "Days", "Date", "Trade for", "Max gain"}), cooldowns, "  ", 0)));
 }
@@ -822,14 +609,13 @@ int count_building_slots(mapping data, string id) {
 	int slots = 2 + building_slots[id]; //All cities get 2, plus possibly a bonus from terrain and/or a penalty from climate.
 	mapping prov = data->provinces["-" + id];
 	if (prov->buildings->?university) ++slots; //A university effectively doesn't consume a slot.
-	if (data->countries[prov->owner]->?area_has_level3[?prov_area[id]]) ++slots; //A level 3 CoT in the state adds a building slot
+	if (data->countries[prov->owner]->?area_has_level3[?CFG->prov_area[id]]) ++slots; //A level 3 CoT in the state adds a building slot
 	//TODO: Modifiers, incl event flags (see all_country_modifiers maybe?)
 	//Notably global_allowed_num_of_buildings
 	int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
 	return slots + dev / 10;
 }
 
-mapping(string:string) manufactories = ([]); //Calculated from building_types
 void analyze_furnace(mapping data, string name, string tag, function|mapping write) {
 	mapping country = data->countries[tag];
 	array coalprov = ({ });
@@ -838,7 +624,7 @@ void analyze_furnace(mapping data, string name, string tag, function|mapping wri
 		if (!province_info[id]->has_coal) continue;
 		int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
 		mapping bldg = prov->buildings || ([]);
-		mapping mfg = bldg & manufactories;
+		mapping mfg = bldg & CFG->manufactories;
 		string status = "";
 		if (prov->trade_goods != "coal") {
 			//Not yet producing coal. There are a few reasons this could be the case.
@@ -848,7 +634,7 @@ void analyze_furnace(mapping data, string name, string tag, function|mapping wri
 			else status = "Producing " + prov->trade_goods; //Assuming the above checks are bug-free, the province should flip to coal at the start of the next month.
 		}
 		else if (bldg->furnace) status = "Has Furnace";
-		else if (building_id[(int)prov->building_construction->?building] == "furnace")
+		else if (CFG->building_id[(int)prov->building_construction->?building] == "furnace")
 			status = prov->building_construction->date;
 		else if (sizeof(mfg)) status = values(mfg)[0];
 		else if (prov->settlement_growth_construction) status = "SETTLER ACTIVE"; //Can't build while there's a settler promoting growth);
@@ -861,8 +647,8 @@ void analyze_furnace(mapping data, string name, string tag, function|mapping wri
 			//that there are five occupied slots and none open; for us here, it's
 			//cleaner to show it as 4/4.
 			++buildings;
-			string upg = building_id[(int)prov->building_construction->building];
-			while (string was = building_types[upg]->make_obsolete) {
+			string upg = CFG->building_id[(int)prov->building_construction->building];
+			while (string was = CFG->building_types[upg]->make_obsolete) {
 				if (bldg[was]) {--buildings; break;}
 				upg = was;
 			}
@@ -892,12 +678,12 @@ void analyze_upgrades(mapping data, string name, string tag, function|mapping wr
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
 		if (!prov->buildings) continue;
-		string constructing = building_id[(int)prov->building_construction->?building]; //0 if not constructing anything
+		string constructing = CFG->building_id[(int)prov->building_construction->?building]; //0 if not constructing anything
 		foreach (prov->buildings; string b;) {
-			mapping bldg = building_types[b]; if (!bldg) continue; //Unknown building??
+			mapping bldg = CFG->building_types[b]; if (!bldg) continue; //Unknown building??
 			if (bldg->influencing_fort) continue; //Ignore forts - it's often not worth upgrading all forts. (TODO: Have a way to request forts too.)
 			mapping target;
-			while (mapping upgrade = building_types[bldg->obsoleted_by]) {
+			while (mapping upgrade = CFG->building_types[bldg->obsoleted_by]) {
 				[string techtype, int techlevel] = upgrade->tech_required;
 				if ((int)country->technology[techtype] < techlevel) break;
 				//Okay. It can be upgraded. But before we report it, see if we can go another level.
@@ -908,7 +694,7 @@ void analyze_upgrades(mapping data, string name, string tag, function|mapping wr
 			}
 			if (target && target != constructing) {
 				interesting(id, PRIO_SITUATIONAL);
-				upgradeables[L10n["building_" + target]] += ({(["id": id, "name": prov->name])}); //Do we need any more info?
+				upgradeables[L10N("building_" + target)] += ({(["id": id, "name": prov->name])}); //Do we need any more info?
 			}
 		}
 	}
@@ -920,20 +706,20 @@ void analyze_upgrades(mapping data, string name, string tag, function|mapping wr
 }
 
 void analyze_findbuildings(mapping data, string name, string tag, function|mapping write, string highlight) {
-	if (mappingp(write)) write->highlight = (["id": highlight, "name": L10n["building_" + highlight], "provinces": ({ })]);
+	if (mappingp(write)) write->highlight = (["id": highlight, "name": L10N("building_" + highlight), "provinces": ({ })]);
 	mapping country = data->countries[tag];
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
 		//Building shipyards in inland provinces isn't very productive
-		if (building_types[highlight]->build_trigger->?has_port && !province_info[id]->?has_port) continue;
+		if (CFG->building_types[highlight]->build_trigger->?has_port && !province_info[id]->?has_port) continue;
 		mapping bldg = prov->buildings || ([]);
 		int slots = count_building_slots(data, id);
 		int buildings = sizeof(bldg);
 		if (prov->building_construction) {
 			//Duplicate of the above
 			++buildings;
-			string upg = building_id[(int)prov->building_construction->building];
-			while (string was = building_types[upg]->?make_obsolete) {
+			string upg = CFG->building_id[(int)prov->building_construction->building];
+			while (string was = CFG->building_types[upg]->?make_obsolete) {
 				if (bldg[was]) {--buildings; break;}
 				upg = was;
 			}
@@ -943,7 +729,7 @@ void analyze_findbuildings(mapping data, string name, string tag, function|mappi
 		int gotone = 0;
 		foreach (prov->buildings || ([]); string b;) {
 			if (b == highlight) {gotone = 1; break;}
-			while (string upg = building_types[b]->make_obsolete) {
+			while (string upg = CFG->building_types[b]->make_obsolete) {
 				if (upg == highlight) {gotone = 1; break;}
 				b = upg;
 			}
@@ -986,7 +772,7 @@ mapping analyze_trade_node(mapping data, mapping trade_nodes, string tag, string
 	//assured by the use of tradenode_upstream_order, which guarantees never to move
 	//downstream (but is otherwise order-independent).
 	mapping here = trade_nodes[node];
-	mapping us = here[tag], defn = tradenode_definitions[node];
+	mapping us = here[tag], defn = CFG->tradenode_definitions[node];
 	//Note that all trade power values here are sent to the client in fixed-place format.
 
 	//Total trade value in the node, equivalent to what is shown in-game as "Incoming" and "Local"
@@ -1193,7 +979,7 @@ mapping analyze_trade_node(mapping data, mapping trade_nodes, string tag, string
 	*/
 
 	mapping ret = ([
-		"id": node, "name": L10n[node], "province": defn->location,
+		"id": node, "name": L10N(node), "province": defn->location,
 		"raw_us": us, "raw_defn": defn,
 		"raw_here_abbr": (mapping)filter((array)here) {return __ARGS__[0][0] != upper_case(__ARGS__[0][0]);},
 		"has_capital": us->has_capital,
@@ -1290,13 +1076,13 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		if (!has_value(which->tags, info->tag)) which->tags += ({info->tag});
 		if (!write->cbs->types[cb->type]) {
 			mapping ty = write->cbs->types[cb->type] = ([
-				"name": L10n[cb->type] || cb->type,
-				"desc": L10n[cb->type + "_desc"] || cb->type + "_desc",
+				"name": L10N(cb->type),
+				"desc": L10N(cb->type + "_desc"),
 			]);
 			//These may be null (and thus empty mappings) if the war goal comes from a mod
 			//or other alteration, and thus cannot be found in the core data files.
-			mapping typeinfo = cb_types[cb->type] || ([]);
-			mapping wargoal = wargoal_types[typeinfo->war_goal] || ([]);
+			mapping typeinfo = CFG->cb_types[cb->type] || ([]);
+			mapping wargoal = CFG->wargoal_types[typeinfo->war_goal] || ([]);
 			if (typeinfo->attacker_disabled_po) ty->restricted = "Some peace offers disabled";
 			else if (wargoal->allowed_provinces_are_eligible) ty->restricted = "Province selection is restricted";
 			foreach (({"badboy", "prestige", "peace_cost"}), string key) ty[key] = (array(float))({
@@ -1338,7 +1124,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"andean": "south_american",
 		])[c->technology_group] || c->technology_group;
 		return ([
-			"name": c->name || L10n[c->tag] || c->tag,
+			"name": c->name || L10N(c->tag),
 			"tech": ({(int)c->technology->adm_tech, (int)c->technology->dip_tech, (int)c->technology->mil_tech}),
 			"technology_group": c->technology_group,
 			"unit_type": unit_type,
@@ -1358,7 +1144,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	foreach (Array.arrayify(data->diplomacy->dependency), mapping dep) {
 		mapping c = write->countries[dep->second]; if (!c) continue;
 		c->overlord = dep->first;
-		c->subject_type = L10n[dep->subject_type + "_title"] || dep->subject_type;
+		c->subject_type = L10N(dep->subject_type + "_title");
 		write->countries[dep->first]->subjects++;
 	}
 	foreach (Array.arrayify(data->diplomacy->alliance), mapping dep) {
@@ -1443,20 +1229,20 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		array modifiers = map(Array.arrayify(prov->modifier)) { [mapping mod] = __ARGS__;
 			if (mod->hidden) return 0;
 			array effects = ({ });
-			foreach (country_modifiers[mod->modifier] || ([]); string effect; string value) {
+			foreach (CFG->country_modifiers[mod->modifier] || ([]); string effect; string value) {
 				if (effect == "picture") continue; //Would be cool to show the icon in the front end, but whatever
 				string desc = upper_case(effect);
 				if (effect == "province_trade_power_value") desc = "PROVINCE_TRADE_VALUE"; //Not sure why, but the localisation files write this one differently.
-				effects += ({sprintf("%s: %s", L10n[desc] || L10n["MODIFIER_" + desc] || effect || "(unknown)", (string)value)});
+				effects += ({sprintf("%s: %s", CFG->L10n[desc] || CFG->L10n["MODIFIER_" + desc] || effect || "(unknown)", (string)value)});
 			}
 			return ([
-				"name": L10n[mod->modifier],
+				"name": L10N(mod->modifier),
 				"effects": effects,
 			]);
 		} - ({0});
 		mapping provinfo = province_info[id - "-"];
-		mapping terraininfo = terrain_definitions->categories[provinfo->terrain] || ([]);
-		mapping climateinfo = static_modifiers[provinfo->climate] || ([]);
+		mapping terraininfo = CFG->terrain_definitions->categories[provinfo->terrain] || ([]);
+		mapping climateinfo = CFG->static_modifiers[provinfo->climate] || ([]);
 		colonization_targets += ({([
 			"id": id - "-",
 			"name": prov->name,
@@ -1511,9 +1297,9 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		//- Provinces controlled by rebels
 		//We don't support these. Some of them will highlight a province
 		//(eg the "area" ones), others won't highlight anything.
-		//Proper handling of highlight types would require parsing the estate_agendas
-		//files and interpreting the provinces_to_highlight block. These files can now
-		//be parsed (see below, commented out), but executing the highlight block is hard.
+		//Proper handling of highlight types would require parsing the CFG->estate_agendas
+		//files and interpreting the provinces_to_highlight block. These files can now be
+		//parsed (see parser.pike, commented out), but executing the highlight block is hard.
 		foreach (Array.arrayify(ag->scope->?saved_event_target), mapping target) switch (target->name) {
 			case "agenda_trade_node": //TODO: Show that it's actually the trade node there??
 			case "agenda_province": write->agenda->province = target->province; break;
@@ -1522,7 +1308,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		}
 		if (write->agenda->province) write->agenda->province_name = data->provinces["-" + write->agenda->province]->name;
 		//If we never find a target of a type we recognize, there's nothing to highlight.
-		string desc = L10n[ag->agenda] || ag->agenda;
+		string desc = L10N(ag->agenda);
 		//Process some other agenda description placeholders before shooting it through to the front end
 		//Most of these are hacks to make it less ugly, because the specific info isn't really interesting.
 		desc = replace(desc, ([
@@ -1537,13 +1323,13 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"[agenda_country.GetAdjective]": "[agenda_country.GetUsableName]",
 			"[Root.GetAdjective]": "",
 			//These two aren't too hard, at least. Assuming they have proper localisations.
-			"[agenda_province.GetAreaName]": "[" + L10n[prov_area[write->agenda->province]] + "]",
-			"[Root.Culture.GetName]": "[" + L10n[country->primary_culture] + "]",
+			"[agenda_province.GetAreaName]": "[" + L10N(CFG->prov_area[write->agenda->province]) + "]",
+			"[Root.Culture.GetName]": "[" + L10N(country->primary_culture) + "]",
 			//We slightly cheat here and always just use the name from the localisation files.
 			//This ignores any tag-specific or culture-specific alternate naming - see the
 			//triggered name blocks in /common/colonial_regions/* - but it'll usually give a
 			//reasonably decent result.
-			"[agenda_province.GetColonialRegionName]": "[" + L10n[prov_colonial_region[write->agenda->province]] + "]",
+			"[agenda_province.GetColonialRegionName]": "[" + L10N(CFG->prov_colonial_region[write->agenda->province]) + "]",
 		]));
 		write->agenda->desc = desc;
 	}
@@ -1566,7 +1352,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			if (!state->active_edict) continue;
 			int unnecessary = 1;
 			string highlightid = ""; //There should always be at least ONE owned province, otherwise you can't have a state!
-			foreach (map_areas[area];; string provid) {
+			foreach (CFG->map_areas[area];; string provid) {
 				mapping prov = data->provinces["-" + provid];
 				if (prov->owner != tag) continue; //Ignore other people's land in your state
 				highlightid = provid;
@@ -1606,9 +1392,9 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			}
 			if (unnecessary) write->notifications += ({({
 				"Unnecessary ",
-				(["color": textcolors->B * ",", "text": L10n[state->active_edict->which]]),
+				(["color": CFG->textcolors->B * ",", "text": L10N(state->active_edict->which)]),
 				" in ",
-				(["color": textcolors->B * ",", "text": L10n[area]]),
+				(["color": CFG->textcolors->B * ",", "text": L10N(area)]),
 				(["prov": highlightid, "nameoverride": ""]),
 			})});
 		}
@@ -1626,10 +1412,10 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			//that have to be completed. I think that, if there are multiple
 			//mission chains in a slot, they are laid out vertically. In any case,
 			//we don't really care about layout, just which missions there are.
-			mapping mission = Array.arrayify(country_missions[kwd]);
+			mapping mission = Array.arrayify(CFG->country_missions[kwd]);
 			foreach (mission; string id; mixed info) {
 				if (has_value(completed, id)) continue; //Already done this mission, don't highlight it.
-				string title = L10n[id + "_title"];
+				string title = CFG->L10n[id + "_title"];
 				if (!title) continue; //TODO: What happens if there's a L10n failure?
 				//if (!mappingp(info)) {werror("WARNING: Not mapping - %O\n", id); continue;} //FIXME: Parse error on Ottoman_Missions, conquer_serbia, fails this assertion (see icon)
 				int prereq = 1;
@@ -1647,7 +1433,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				array provs = Array.arrayify(highlight->province_id) + Array.arrayify(highlight->OR->?province_id);
 				array areas = Array.arrayify(highlight->area) + Array.arrayify(highlight->OR->?area);
 				array interesting = ({ });
-				foreach (map_areas[areas[*]] + ({provs}), array|maparray area)
+				foreach (CFG->map_areas[areas[*]] + ({provs}), array|object area)
 					foreach (area;; string provid) {
 						mapping prov = data->provinces["-" + provid];
 						int keep = 1;
@@ -1677,7 +1463,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	      - ie ignore everything you or a non-tributary subject owns
 	    - others?
 	*/
-	foreach (country_decisions; string kwd; mapping info) {
+	foreach (CFG->country_decisions; string kwd; mapping info) {
 		//TODO.
 		if (!passes_filter(country, info->potential)) continue;
 		//werror("%s -> %s %O\n", tag, kwd, info->potential);
@@ -1689,7 +1475,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"discovered": has_value(Array.arrayify(prov->discovered_by), tag),
 			"controller": prov->controller, "owner": prov->owner,
 			"name": prov->name,
-			"wet": terrain_definitions->categories[province_info[id - "-"]->?terrain]->?is_water,
+			"wet": CFG->terrain_definitions->categories[province_info[id - "-"]->?terrain]->?is_water,
 			"terrain": province_info[id - "-"]->?terrain,
 			"climate": province_info[id - "-"]->?climate,
 			//"raw": prov,
@@ -1699,7 +1485,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	//Get some info about trade nodes
 	array all_nodes = data->trade->node;
 	mapping trade_nodes = mkmapping(all_nodes->definitions, all_nodes);
-	write->trade_nodes = analyze_trade_node(data, trade_nodes, tag, tradenode_upstream_order[*], prefs);
+	write->trade_nodes = analyze_trade_node(data, trade_nodes, tag, CFG->tradenode_upstream_order[*], prefs);
 
 	//Get info about mil tech levels and which ones are important
 	write->miltech = ([
@@ -1707,7 +1493,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		"group": country->technology_group,
 		"units": country->unit_type,
 		"groupname": L10N(country->technology_group),
-		"levels": military_tech_levels,
+		"levels": CFG->military_tech_levels,
 	]);
 
 	//List all cultures present in your nation, and the impact of promoting or demoting them.
@@ -1717,7 +1503,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	int cultural_union = country->government_rank == "3"; //Empire rank, no penalty for brother cultures
 	int is_republic = all_country_modifiers(data, country)->republic ? 50 : 0;
 	array brother_cultures = ({ });
-	foreach (culture_definitions; string group; mapping info) if (info[primary]) brother_cultures = indices(info);
+	foreach (CFG->culture_definitions; string group; mapping info) if (info[primary]) brother_cultures = indices(info);
 	void affect(mapping culture, string cat, int amount, int autonomy, int impact) {
 		culture[cat + "_base"] += amount;
 		culture[cat + "_auto"] += amount * (100000 - autonomy) / 100000;
@@ -1752,7 +1538,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		//Manpower is 250 per base tax, with a very real source of additional base manpower.
 		int mp = manpower * 250;
 		if (prov->buildings->?soldier_households)
-			mp += has_value(building_types->soldier_households->bonus_manufactory, prov->trade_goods) ? 1500000 : 750000;
+			mp += has_value(CFG->building_types->soldier_households->bonus_manufactory, prov->trade_goods) ? 1500000 : 750000;
 		affect(culture, "manpower", mp, autonomy, impact);
 		//Sailors are 60 per base dev _of any kind_, with a manufactory. They also have
 		//different percentage impact for culture discrepancies.
@@ -1760,7 +1546,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		impact = culture->status == "brother" ? 100 * !cultural_union
 			: culture->status == "foreign" ? 200 - is_republic : 0;
 		if (prov->buildings->?impressment_offices)
-			sailors += has_value(building_types->impressment_offices->bonus_manufactory, prov->trade_goods) ? 500000 : 250000;
+			sailors += has_value(CFG->building_types->impressment_offices->bonus_manufactory, prov->trade_goods) ? 500000 : 250000;
 		affect(culture, "sailors", sailors, autonomy, impact);
 	}
 	//List accepted cultures first, then non-accepted, in order of impact.
@@ -1784,7 +1570,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		mapping hunt_rebel = army->mission->?hunt_rebel;
 		if (!hunt_rebel) continue; //Not hunting rebels (maybe on another mission, or no mission at all).
 		foreach (hunt_rebel->areas, string a)
-			foreach (map_areas[a];; string id) coverage[id] += effect;
+			foreach (CFG->map_areas[a];; string id) coverage[id] += effect;
 	}
 	write->unguarded_rebels = ({ });
 	foreach (Array.arrayify(data->rebel_faction), mapping faction) if (faction->country == tag) {
@@ -1866,7 +1652,7 @@ void analyze(mapping data, string name, string tag, function|mapping|void write,
 	if (!write) write = Stdio.stdin->write;
 	interesting_province = ({ }); interest_priority = 0;
 	if (mappingp(write)) {
-		write->name = name + " (" + (data->countries[tag]->name || L10n[tag] || tag) + ")";
+		write->name = name + " (" + (data->countries[tag]->name || L10N(tag)) + ")";
 		write->fleetpower = prefs->fleetpower || 1000;
 	}
 	else write("\e[1m== Player: %s (%s) ==\e[0m\n", name, tag);
@@ -1948,22 +1734,22 @@ void analyze_flagships(mapping data, function|mapping write) {
 			foreach (Array.arrayify(fleet->ship), mapping ship) {
 				if (!ship->flagship) continue;
 				string was = ship->flagship->is_captured && ship->flagship->original_owner;
-				string cap = was ? " CAPTURED from " + (data->countries[was]->name || L10n[was] || was) : "";
+				string cap = was ? " CAPTURED from " + (data->countries[was]->name || L10N(was)) : "";
 				if (mappingp(write)) flagships += ({({
 					tag, fleet->name,
-					L10n[ship->type], ship->name,
-					L10n[ship->flagship->modification[*]],
-					ship->flagship->is_captured ? (data->countries[was]->name || L10n[was] || was) : ""
+					L10N(ship->type), ship->name,
+					L10N(ship->flagship->modification[*]),
+					ship->flagship->is_captured ? (data->countries[was]->name || L10N(was)) : ""
 				})});
 				else flagships += ({({
 					string_to_utf8(sprintf("\e[1m%s\e[0m - %s: \e[36m%s %q\e[31m%s\e[0m",
-						country->name || L10n[tag] || tag, fleet->name,
-						L10n[ship->type], ship->name, cap)),
+						country->name || L10N(tag), fleet->name,
+						L10N(ship->type), ship->name, cap)),
 					//Measure size without colour codes or UTF-8 encoding
 					sizeof(sprintf("%s - %s: %s %q%s",
-						country->name || L10n[tag] || tag, fleet->name,
-						L10n[ship->type], ship->name, cap)),
-					L10n[ship->flagship->modification[*]] * ", ",
+						country->name || L10N(tag), fleet->name,
+						L10N(ship->type), ship->name, cap)),
+					L10N(ship->flagship->modification[*]) * ", ",
 				})});
 				//write("%O\n", ship->flagship);
 			}
@@ -2068,7 +1854,7 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 				-total_army * 1000000000 - mp,
 				({
 					side,
-					mappingp(write) ? p->tag : country->name || L10n[p->tag] || p->tag,
+					mappingp(write) ? p->tag : country->name || L10N(p->tag),
 					mil->infantry, mil->cavalry, mil->artillery,
 					mil->merc_infantry, mil->merc_cavalry, mil->merc_artillery,
 					total_army, mp,
@@ -2083,7 +1869,7 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 				-total_navy * 1000000000 - sailors,
 				({
 					side,
-					mappingp(write) ? p->tag : country->name || L10n[p->tag] || p->tag,
+					mappingp(write) ? p->tag : country->name || L10N(p->tag),
 					mil->heavy_ship, mil->light_ship, mil->galley, mil->transport, total_navy, sailors,
 					sprintf("%3.0f%%", (float)country->navy_tradition),
 				}),
@@ -2196,11 +1982,11 @@ class Connection(Stdio.File sock) {
 					}
 					string tag = last_parsed_savefile && find_country(last_parsed_savefile, notify);
 					if (!tag) break;
-					if (!building_types[arg]) {
+					if (!CFG->building_types[arg]) {
 						array available = ({ });
 						mapping tech = last_parsed_savefile->countries[tag]->technology;
 						int have_mfg = 0;
-						foreach (building_types; string id; mapping bldg) {
+						foreach (CFG->building_types; string id; mapping bldg) {
 							[string techtype, int techlevel] = bldg->tech_required || ({"", 100}); //Ignore anything that's not a regular building
 							if ((int)tech[techtype] < techlevel) continue; //Hide IDs you don't have the tech to build
 							if (bldg->obsoleted_by) continue; //Show only the baseline building for each type
@@ -2215,7 +2001,7 @@ class Connection(Stdio.File sock) {
 						break;
 					}
 					//If you say "highlight stock_exchange", act as if you said "highlight marketplace".
-					while (string older = building_types[arg]->make_obsolete) arg = older;
+					while (string older = CFG->building_types[arg]->make_obsolete) arg = older;
 					highlight = arg;
 					analyze_findbuildings(last_parsed_savefile, notify, tag, outgoing->sprintf, arg);
 					sock->write("");
@@ -2260,7 +2046,7 @@ void done_processing_savefile(object pipe, string msg) {
 	if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
 	write("\nCurrent date: %s\n", data->date);
 	string mods = (data->mods_enabled_names||({}))->filename * ",";
-	G->G->mods_inconsistent = mods != currently_loaded_mods;
+	G->G->mods_inconsistent = mods != CFG->active_mods;
 	indices(connections[""])->inform(data);
 	G->G->provincecycle = ([]);
 	last_parsed_savefile = data;
@@ -2274,7 +2060,7 @@ class PipeConnection {
 		while (array ret = incoming->sscanf("%s\n")) {
 			[string fn] = ret;
 			string raw = Stdio.read_file(fn); //Assumes ISO-8859-1, which I think is correct
-			if (parse_savefile(raw, basename(fn))) sock->write("*"); //Signal the parent. It can read it back from the cache.
+			if (G->parser->parse_savefile(raw, basename(fn))) sock->write("*"); //Signal the parent. It can read it back from the cache.
 		}
 	}
 }
@@ -2309,7 +2095,6 @@ To check:
 array recent_peace_treaties = ({ }); //Recent peace treaties only, but hopefully useful
 /* @export: */ array get_savefile_info() {return ({last_parsed_savefile, recent_peace_treaties});}
 
-mapping(string:array|string|object) icons = ([]);
 array|string text_with_icons(string text) {
 	//Note: This assumes the log file is ISO-8859-1. (It does always seem to be.)
 	//Parse out icons like "\xA3dip" into image references
@@ -2322,8 +2107,8 @@ array|string text_with_icons(string text) {
 		if (end != "\xA3") text = end + text;
 		string key;
 		//TODO: If we find multiple arrays of filenames, join them together
-		foreach (({"GFX_text_" + icon, "GFX_" + icon}), string tryme) if (icons[tryme]) {key = tryme; break;}
-		array|string img = key ? icons[key] : "data:image/borked,unknown_key";
+		foreach (({"GFX_text_" + icon, "GFX_" + icon}), string tryme) if (CFG->icons[tryme]) {key = tryme; break;}
+		array|string img = key ? CFG->icons[key] : "data:image/borked,unknown_key";
 		if (arrayp(img)) {
 			//Some icons have multiple files. Try each one in turn until one succeeds.
 			//Hack: Some are listed with TGA files, but actually have DDSes provided.
@@ -2339,7 +2124,7 @@ array|string text_with_icons(string text) {
 				break;
 			}
 			if (arrayp(img)) img = "data:image/borked," + img * ","; //Hopefully browsers will know that they can't render this
-			icons["GFX_text_" + icon] = img;
+			CFG->icons["GFX_text_" + icon] = img;
 		}
 		ret += ({plain, (["icon": img, "title": icon])});
 	}
@@ -2347,7 +2132,6 @@ array|string text_with_icons(string text) {
 	return ret + ({text});
 }
 
-mapping textcolors;
 array parse_text_markers(string line) {
 	//Parse out colour codes and other markers
 	array info = ({ });
@@ -2356,7 +2140,7 @@ array parse_text_markers(string line) {
 		//"\xA7!" means reset, and "\xA7W" means white, which seems to be used
 		//as a reset. Ignore them both and just return the text as-is.
 		if (code == "!" || code == "W") continue;
-		array(string) color = textcolors[code];
+		array(string) color = CFG->textcolors[code];
 		if (!color) {
 			info += ({(["abbr": "<COLOR>", "title": "Unknown color code (" + code + ")"])});
 			continue;
@@ -2466,6 +2250,12 @@ void watch_game_log(object inot) {
 }
 
 int main(int argc, array(string) argv) {
+	add_constant("G", this);
+	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
+	add_constant("get_savefile_info", get_savefile_info);
+	add_constant("L10N", L10N);
+	G->parser = compile_file("parser.pike")("parser"); //Needed for the parser process as well as the main
+
 	if (argc > 1 && argv[1] == "--parse") {
 		//Parser subprocess, invoked by parent for asynchronous parsing.
 		PipeConnection(Stdio.File(3)); //We should have been given fd 3 as a pipe
@@ -2476,16 +2266,11 @@ int main(int argc, array(string) argv) {
 		object start = System.Timer();
 		#define TIME(x) {float tm = gauge {x;}; write("%.3f\t%.3f\t%s\n", start->get(), tm, #x);}
 		string raw; TIME(raw = Stdio.read_file(SAVE_PATH + "/" + fn));
-		mapping data; TIME(data = parse_savefile_string(raw));
+		mapping data; TIME(data = G->parser->parse_savefile_string(raw));
 		write("Parse successful. Date: %s\n", data->date);
 		return 0;
 	}
-
-	add_constant("G", this);
-	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
-	add_constant("get_savefile_info", get_savefile_info);
-	G->webserver = compile_file("webserver.pike")("webserver");
-	G->parser = compile_file("parser.pike")("parser");
+	G->webserver = compile_file("webserver.pike")("webserver"); //Only needed for the main entrypoint
 
 	//Load up some info that is presumed to not change. If you're tweaking a game mod, this may break.
 	//In general, if you've made any change that could affect things, restart the parser to force it
@@ -2494,306 +2279,7 @@ int main(int argc, array(string) argv) {
 	//Note: Order of mods is not guaranteed here. The game does them in alphabetical order, but with
 	//handling of dependencies.
 	array mods_enabled = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data->?mods_enabled_names || ({ });
-	foreach (mods_enabled, mapping mod) {
-		mapping info = low_parse_savefile(Stdio.read_file(SAVE_PATH + "/../" + mod->filename));
-		string path = info->path; if (!path) continue;
-		if (!has_prefix(path, "/")) path = SAVE_PATH + "/../" + path;
-		config_dirs += ({path});
-	}
-	currently_loaded_mods = mods_enabled->filename * ",";
-
-	mapping gfx = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/interface/core.gfx"));
-	//There might be multiple bitmapfonts entries. Logically, I think they should just be merged? Not sure.
-	//It seems that only one of them has the textcolors block that we need.
-	array|mapping tc = gfx->bitmapfonts->textcolors;
-	if (arrayp(tc)) textcolors = (tc - ({0}))[0]; else textcolors = tc;
-	foreach (sort(glob("*.gfx", get_dir(PROGRAM_PATH + "/interface"))), string fn) {
-		string raw = Stdio.read_file(PROGRAM_PATH + "/interface/" + fn);
-		//HACK: One of the files has a weird loose semicolon in it! Comment character? Unnecessary separator?
-		raw = replace(raw, ";", "");
-		mapping data = low_parse_savefile(raw);
-		array sprites = data->?spriteTypes->?spriteType;
-		if (sprites) foreach (Array.arrayify(sprites), mapping sprite)
-			icons[sprite->name] += ({sprite->texturefile});
-	}
-	catch {L10n = Standards.JSON.decode_utf8(Stdio.read_file(".eu4_localisation.json"));};
-	if (!mappingp(L10n) || L10n->_mods_loaded != currently_loaded_mods) {
-		L10n = (["_mods_loaded": currently_loaded_mods]);
-		foreach (config_dirs, string dir)
-			foreach (glob("*_l_english.yml", get_dir(dir + "/localisation") || ({ })), string fn)
-				parse_localisation(Stdio.read_file(dir + "/localisation/" + fn));
-		Stdio.write_file(".eu4_localisation.json", Standards.JSON.encode(L10n, 1));
-	}
-	map_areas = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/map/area.txt"));
-	foreach (map_areas; string areaname; array|maparray provinces)
-		foreach (provinces;; string id) prov_area[id] = areaname;
-	mapping colo_regions = parse_config_dir("/common/colonial_regions");
-	foreach (colo_regions; string regionname; mapping info)
-		foreach (info->provinces || ({ }), string prov) prov_colonial_region[prov] = regionname;
-	terrain_definitions = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/map/terrain.txt"));
-	mapping climates = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/map/climate.txt"));
-	//Terrain and climate info are used below.
-	retain_map_indices = 1;
-	building_types = parse_config_dir("/common/buildings");
-	retain_map_indices = 0;
-	building_id = allocate(sizeof(building_types));
-	foreach (building_types; string id; mapping info) {
-		if (info->manufactory) manufactories[id] = info->show_separate ? "Special" : "Basic";
-		//Map the index to the ID, counting from 1, but skipping the "manufactory" pseudo-entry
-		//(not counting it and collapsing the gap).
-		if (id != "manufactory") building_id[info->_index + (info->_index < building_types->manufactory->_index)] = id;
-	}
-	tech_definitions = ([]);
-	foreach (({"adm", "dip", "mil"}), string cat) {
-		mapping tech = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/common/technologies/" + cat + ".txt"));
-		tech_definitions[cat] = tech_definitions[cat + "_tech"] = tech;
-		foreach (tech->technology; int level; mapping effects) {
-			//The effects include names of buildings, eg "university = yes".
-			foreach (effects; string id;) if (mapping bld = building_types[id]) {
-				bld->tech_required = ({cat + "_tech", level});
-				if (bld->make_obsolete) building_types[bld->make_obsolete]->obsoleted_by = id;
-			}
-		}
-	}
-	retain_map_indices = 1;
-	idea_definitions = parse_config_dir("/common/ideas");
-	retain_map_indices = 0;
-	mapping cat_ideas = ([]);
-	foreach (idea_definitions; string grp; mapping group) {
-		array basic_ideas = ({ }), pos = ({ });
-		mapping tidied = ([]);
-		foreach (group; string id; mixed idea) {
-			if (!mappingp(idea)) continue;
-			int idx = m_delete(idea, "_index");
-			switch (id) {
-				case "start": case "bonus":
-					idea->desc = grp + " (" + id + ")";
-					tidied[id] = idea;
-					break;
-				case "trigger": case "free": case "category": case "ai_will_do":
-					break; //Ignore these attributes, they're not actual ideas
-				default:
-					idea->desc = grp + ": " + id;
-					basic_ideas += ({idea});
-					pos += ({idx});
-			}
-		}
-		sort(pos, basic_ideas);
-		//tidied->category = group->category; //useful?
-		tidied->ideas = basic_ideas;
-		idea_definitions[grp] = tidied;
-		if (group->category) cat_ideas[group->category] += ({grp});
-	}
-	policy_definitions = parse_config_dir("/common/policies");
-	/*mapping policies = ([]);
-	foreach (policy_definitions; string id; mapping info) {
-		array ideas = info->allow->?full_idea_group; if (!ideas) continue;
-		string cat = info->monarch_power; //Category of the policy. Usually will be one of the idea groups' categories.
-		array cats = idea_definitions[ideas[*]]->category;
-		sort(cats, ideas);
-		if (!policies[ideas[0]]) policies[ideas[0]] = ([]);
-		policies[ideas[0]][ideas[1]] = cat;
-	}
-	mapping counts = ([]);
-	foreach (cat_ideas->ADM, string adm) {
-		foreach (cat_ideas->DIP, string dip) {
-			foreach (cat_ideas->MIL, string mil) {
-				string cats = sort(({policies[adm][dip], policies[adm][mil], policies[dip][mil]})) * " ";
-				//werror("%s %s %s -> %s\n", adm, dip, mil, cats);
-				counts[cats] += ({sprintf("%s %s %s", adm - "_ideas", dip - "_ideas", mil - "_ideas")});
-			}
-		}
-	}
-	exit(0, "%O\n", counts);*/
-	estate_definitions = parse_config_dir("/common/estates");
-	estate_privilege_definitions = parse_config_dir("/common/estate_privileges");
-	reform_definitions = parse_config_dir("/common/government_reforms");
-	static_modifiers = parse_config_dir("/common/static_modifiers");
-	retain_map_indices = 1;
-	trade_goods = parse_config_dir("/common/tradegoods");
-	institutions = parse_config_dir("/common/institutions");
-	array custom_nation_ideas = gather_config_dir("/common/custom_ideas");
-	retain_map_indices = 0;
-	foreach (trade_goods; string id; mapping info) {
-		trade_goods[info->_index + 1] = info;
-		info->id = id;
-	}
-
-	//Skim over the custom ideas and collect them in order
-	//The idea group keys aren't particularly meaningful, but might be of interest; they
-	//mostly tell you when something got added (eg leviathan_idea_mil_modifiers).
-	foreach (custom_nation_ideas, mapping ideafile) {
-		array idea_groups = values(ideafile); sort(idea_groups->_index, idea_groups);
-		foreach (idea_groups, mapping grp) {
-			string cat = grp->category;
-			grp = filter(grp, mappingp); //Some of the entries aren't actual ideas
-			array ids = indices(grp), details = values(grp);
-			sort(details->_index, ids, details);
-			foreach (details; int i; mapping idea) {
-				m_delete(idea, "_index");
-				m_delete(idea, "enabled"); //Conditions under which this is available (generally a DLC that has to be active)
-				m_delete(idea, "chance"); //I think this is for random generation of nations??
-				//The mapping contains a handful of administrative entries, plus the
-				//actual effects. So if we remove the known administrative keys, we
-				//should be able to then use the rest as effects. There'll usually be
-				//precisely one; as of version 1.34, only two custom ideas have more
-				//(can_recruit_hussars and has_carolean), and they both are a bit
-				//broken in the display. I'm not too worried.
-				idea->effects = indices(idea) - ({"default", "max_level"}) - filter(indices(idea), has_prefix, "level_cost_");
-				idea->effectname = "(no effect)"; //Alternatively, make this a mapping for all of them
-				foreach (idea->effects, string eff) {
-					string ueff = upper_case(eff);
-					//The localisation keys for effects like this are a bit of a mess. For
-					//instance, the "+1 missionaries" ability is localised as YEARLY_MISSIONARIES
-					//but most things are MODIFIER_THING_BEING_MODIFIED - except a couple, which
-					//are THING_BEING_MODIFIED_MOD. And some are even less obvious, such as:
-					//idea_claim_colonies -> MODIFIER_CLAIM_COLONIES
-					//cb_on_religious_enemies -> MAY_ATTACK_RELIGIOUS_ENEMIES
-					//state_governing_cost -> MODIFIER_STATES_GOVERNING_COST (with the 's')
-					//leader_naval_manuever -> NAVAL_LEADER_MANEUVER (one's misspelled)
-					//My guess is that there's a list somewhere, probably inside the binary (as
-					//it's not in the edit files anywhere), that just lists the keys. So for the
-					//worst outliers, I'm not even bothering to try; instead, we just take the
-					//L10n string for the idea itself. This will make the strings look different
-					//from the in-game ones occasionally, but it's too hard to fix the edge cases.
-					idea->effectname = L10n["YEARLY_" + ueff] || L10n["MODIFIER_" + ueff]
-						|| L10n[eff] || L10n[ueff] || L10n[ueff + "_MOD"]
-						|| sprintf("%s (%s)", L10n[ids[i]], eff);
-					idea->effectvalue = stringp(idea[eff]) ? threeplace(idea[eff]) : idea[eff];
-				}
-				//idea->_index = custom_ideas && sizeof(custom_ideas); //useful for debugging
-				idea->category = cat;
-				idea->id = ids[i];
-				idea->name = L10N(idea->id);
-				idea->desc = L10N(idea->id + "_desc");
-				custom_ideas += ({([
-					"max_level": 4, //These defaults come from defines.lua
-					"level_cost_1": "0",
-					"level_cost_2": "5",
-					"level_cost_3": "15",
-					"level_cost_4": "30",
-					//Defaults for levels 5-10 also exist, but currently, no ideas specify a max_level
-					//higher than 4 without also specifying every single cost. If this ends up needed,
-					//consider reducing the noise by providing default costs only up to the max_level.
-				]) | idea});
-			}
-		}
-	}
-
-	country_modifiers = parse_config_dir("/common/event_modifiers")
-		| parse_config_dir("/common/parliament_issues");
-	age_definitions = parse_config_dir("/common/ages");
-	mapping cot_raw = parse_config_dir("/common/centers_of_trade");
-	cot_definitions = ([]);
-	foreach (cot_raw; string id; mapping info) {
-		cot_definitions[info->type + info->level] = info;
-		info->id = id;
-	}
-	state_edicts = parse_config_dir("/common/state_edicts");
-	imperial_reforms = parse_config_dir("/common/imperial_reforms");
-	cb_types = parse_config_dir("/common/cb_types");
-	wargoal_types = parse_config_dir("/common/wargoal_types");
-	G->webserver->custom_country_colors = parse_config_dir("/common/custom_country_colors");
-	//estate_agendas = parse_config_dir("/common/estate_agendas"); //Not currently in use
-	country_decisions = parse_config_dir("/decisions", "country_decisions");
-	country_missions = ([]);
-	//country_missions = parse_config_dir("/missions"); //FIXME: Broken in 1.35.3 (lingering maparray)
-	advisor_definitions = parse_config_dir("/common/advisortypes");
-	culture_definitions = parse_config_dir("/common/cultures");
-	religion_definitions = parse_config_dir("/common/religions");
-	great_projects = parse_config_dir("/common/great_projects");
-	retain_map_indices = 1;
-	tradenode_definitions = parse_config_dir("/common/tradenodes");
-	retain_map_indices = 0;
-	//Trade nodes have outgoing connections recorded, but it's more useful to us to
-	//invert that and record the incoming connections.
-	foreach (tradenode_definitions; string id; mapping info) {
-		info->incoming += ({ }); //Ensure arrays even for end nodes
-		foreach (info->outgoing = Array.arrayify(info->outgoing), mapping o)
-			tradenode_definitions[o->name]->incoming += ({id});
-	}
-	//Build a parse order for trade nodes. Within this parse order, any node which sends
-	//trade to another node must be later within the order than that node; in other words,
-	//Valencia must come after Genoa, because Valencia sends trade to Genoa. This is kinda
-	//backwards, but we're using this for predictive purposes, so it's more useful to see
-	//the destination nodes first.
-	//First, enumerate all nodes, sorted by outgoing node count. Those with zero outgoing
-	//nodes (end nodes) will be first, and they have no dependencies.
-	//Take the first node from the list. If it has an outgoing node that we haven't seen,
-	//flag the other node as a dependency and move on; by sorting by outgoing node count,
-	//we minimize the number of times that this should happen.
-	//Move this node to the Done list. If it is the dependency of any other nodes, reprocess
-	//those nodes, potentially recursively.
-	//Iterate. Once the queue is empty, the entire map should have been sorted out, and the
-	//last node on the list should be one of the origin nodes (with no incomings). Other
-	//origin-only nodes may have been picked up earlier though, so don't rely on this.
-	array nodes = indices(tradenode_definitions);
-	sort(sizeof(values(tradenode_definitions)->outgoing[*]), nodes);
-	array node_order = ({ });
-	nextnode: while (sizeof(nodes)) {
-		[string cur, nodes] = Array.shift(nodes);
-		mapping info = tradenode_definitions[cur];
-		foreach (info->outgoing, mapping o) {
-			if (!has_value(node_order, o->name)) { //This is potentially O(n²) but there aren't all that many trade nodes.
-				//This node sends trade to a node we haven't processed yet.
-				//Delay this node until the other one has been processed.
-				tradenode_definitions[o->name]->depend += ({cur});
-				continue nextnode;
-			}
-		}
-		//(because Pike doesn't have for-else blocks, this is done with a continue)
-		//Okay, we didn't run into a node we haven't processed. Accept this one.
-		node_order += ({cur});
-		//If this is a dep of anything, reprocess them. They might depend on some
-		//other unprocessed nodes, although it's unlikely; if they do, they'll get
-		//plopped into another dep array.
-		if (array dep = m_delete(info, "depend")) nodes = dep + nodes;
-		//For convenience, allow the definitions to be accessed by index too.
-		//Note that the index used in the "incoming" array is actually one-based
-		//and a string, not zero-based integers as we're using.
-		//Not currently needed but can be activated if it becomes useful.
-		//tradenode_definitions[(string)(info->_index + 1)] = info;
-	}
-	tradenode_upstream_order = node_order;
-
-	//TODO: What if a mod changes units? How does that affect this?
-	unit_definitions = ([]);
-	foreach (get_dir(PROGRAM_PATH + "/common/units"), string fn) {
-		mapping data = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/common/units/" + fn));
-		unit_definitions[fn - ".txt"] = data;
-	}
-	mapping cumul = ([
-		"infantry_fire": 0, "infantry_shock": 0,
-		"cavalry_fire": 0, "cavalry_shock": 0,
-		"artillery_fire": 0, "artillery_shock": 0,
-		"land_morale": 0,
-		"military_tactics": 500,
-		"maneuver_value": 0, //What's this do exactly? Does it add to your troops' maneuver? Does it multiply?
-	]), techgroups = ([]);
-	military_tech_levels = ({ });
-	foreach (tech_definitions->mil->technology; int lvl; mapping tech) {
-		foreach (cumul; string k; string cur)
-			cumul[k] = cur + threeplace(tech[k]);
-		foreach (Array.arrayify(tech->enable), string un) {
-			mapping unit = unit_definitions[un];
-			int pips = (int)unit->offensive_morale + (int)unit->defensive_morale
-				+ (int)unit->offensive_fire + (int)unit->defensive_fire
-				+ (int)unit->offensive_shock + (int)unit->defensive_shock;
-			techgroups[unit->unit_type + "_" + unit->type] = pips * 1000; //Put everything in threeplace for consistency
-		}
-		military_tech_levels += ({cumul + techgroups});
-	}
-
-	//Parse out localised province names and map from province ID to all its different names
-	province_localised_names = ([]);
-	foreach (sort(get_dir(PROGRAM_PATH + "/common/province_names")), string fn) {
-		mapping names = low_parse_savefile(Stdio.read_file(PROGRAM_PATH + "/common/province_names/" + fn) + "\n");
-		string lang = L10n[fn - ".txt"] || fn; //Assuming that "castilian.txt" is the culture Castilian, and "TUR.txt" is the nation Ottomans
-		foreach (names; string prov; array|string name) {
-			if (arrayp(name)) name = name[0]; //The name can be [name, capitalname] but we don't care about the capital name
-			province_localised_names[(string)prov] += ({({name, lang})});
-		}
-	}
+	CFG = G->parser->GameConfig(mods_enabled->filename);
 
 	/* It is REALLY REALLY hard to replicate the game's full algorithm for figuring out which terrain each province
 	has. So, instead, let's ask for a little help - from the game, and from the human. And then save the results.
@@ -2815,6 +2301,10 @@ int main(int argc, array(string) argv) {
 
 	Since we can't do it the easy way, let's do it the hard way instead. For each province ID, for each terrain, if
 	the province has that terrain, log a message. If it's stupid, but it works........ no, it's still stupid.
+
+	TODO: Mark the log (maybe in PROV-TERRAIN-BEGIN) with the EU4 version, permanently notice this, and key the
+	cache by the version. That way it won't be a problem if there are province changes and you switch back and
+	forth across the update. This could then move into the CFG object.
 	*/
 	province_info = Standards.JSON.decode(Stdio.read_file(".eu4_provinces.json") || "0");
 	if (!mappingp(province_info)) {
@@ -2822,7 +2312,7 @@ int main(int argc, array(string) argv) {
 		//We assume that every province that could be of interest to us will be in an area.
 		Stdio.File script = Stdio.File(SAVE_PATH + "/../prov.txt", "wct");
 		script->write("log = \"PROV-TERRAIN-BEGIN\"\n");
-		foreach (sort(indices(prov_area)), string provid) {
+		foreach (sort(indices(CFG->prov_area)), string provid) {
 			script->write(
 #"%s = {
 	set_variable = { which = terrain_reported value = -1 }
@@ -2840,7 +2330,7 @@ int main(int argc, array(string) argv) {
 		log = \"PROV-TERRAIN: %<s has_port=1\"
 	}
 ", provid);
-			foreach (terrain_definitions->categories; string type; mapping info) {
+			foreach (CFG->terrain_definitions->categories; string type; mapping info) {
 				script->write(
 #"	if = {
 		limit = { has_terrain = %s is_wasteland = no }
@@ -2848,7 +2338,7 @@ int main(int argc, array(string) argv) {
 	}
 ", type, provid);
 			}
-			foreach (climates; string type; mixed info) if (arrayp(info)) {
+			foreach (CFG->climates; string type; mixed info) if (arrayp(info)) {
 				script->write(
 #"	if = {
 		limit = { has_climate = %s is_wasteland = no }
@@ -2870,7 +2360,7 @@ log = \"PROV-TERRAIN-END\"
 		script->close();
 		//See if the script's already been run (yes, we rebuild the script every time - means you
 		//can rerun it in case there've been changes), and if so, parse and save the data.
-		string log = Stdio.read_file(SAVE_PATH + "/../logs/game.log") || "";
+		string log = Stdio.read_file(LOCAL_PATH + "/logs/game.log") || "";
 		if (!has_value(log, "PROV-TERRAIN-BEGIN") || !has_value(log, "PROV-TERRAIN-END"))
 			exit(0, "Please open up EU4 and, in the console, type: run prov.txt\n");
 		string terrain = ((log / "PROV-TERRAIN-BEGIN")[-1] / "PROV-TERRAIN-END")[0];
@@ -2886,9 +2376,9 @@ log = \"PROV-TERRAIN-END\"
 		Stdio.write_file(".eu4_provinces.json", Standards.JSON.encode(province_info));
 	}
 	foreach (province_info; string id; mapping provinfo) {
-		mapping terraininfo = terrain_definitions->categories[provinfo->terrain];
+		mapping terraininfo = CFG->terrain_definitions->categories[provinfo->terrain];
 		if (int slots = (int)terraininfo->?allowed_num_of_buildings) building_slots[id] += slots;
-		mapping climateinfo = static_modifiers[provinfo->climate];
+		mapping climateinfo = CFG->static_modifiers[provinfo->climate];
 		if (int slots = (int)climateinfo->?allowed_num_of_buildings) building_slots[id] += slots;
 	}
 
