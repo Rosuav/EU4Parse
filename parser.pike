@@ -193,6 +193,28 @@ Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
 	else return image_cache[fn][0];
 }
 
+array(string) find_mod_directories(array(string) mod_filenames) {
+	array config_dirs = ({G->PROGRAM_PATH});
+	foreach (mod_filenames, string fn) {
+		mapping info = parse_eu4txt(Stdio.read_file(G->LOCAL_PATH + "/" + fn));
+		string path = info->path; if (!path) continue;
+		if (!has_prefix(path, "/")) path = G->LOCAL_PATH + "/" + path;
+		config_dirs += ({path});
+	}
+	return config_dirs;
+}
+
+array list_config_dir(array(string) config_dirs, string dir) {
+	//A mod can add more files, or can replace entire files (but not parts of a file).
+	//Files are then processed in affabeck regardless of their paths (I think that's how the game does it).
+	mapping files = ([]);
+	foreach (config_dirs, string base)
+		foreach (sort(get_dir(base + dir) || ({ })), string fn)
+			files[fn] = base + dir + "/" + fn;
+	array filenames = indices(files); sort(lower_case(filenames[*]), filenames); //Sort case insensitively? I think this is how it's to be done?
+	return files[filenames[*]];
+}
+
 //The current instance of this class is available as G->CFG
 class GameConfig {
 	//Everything in this class affects the EU4 checksum. Mods can change the underlying
@@ -204,7 +226,7 @@ class GameConfig {
 	//game does, as listed in checksum_manifest.txt? It wouldn't matter if the hash isn't
 	//the same as the game's one, as long as it changes whenever the game's hash changes.
 	string active_mods; //Comma-separated signature string of all active mods. Might need game version too?
-	array config_dirs = ({G->PROGRAM_PATH});
+	array config_dirs;
 	mapping icons = ([]), textcolors;
 	mapping prov_area = ([]), map_areas = ([]), prov_colonial_region = ([]);
 	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
@@ -224,15 +246,9 @@ class GameConfig {
 	//If key is provided, will return only that key from each file.
 	array gather_config_dir(string dir, string|void key) {
 		array ret = ({([])}); //Ensure that we at least have an empty mapping even if no config files
-		//A mod can add more files, or can replace entire files (but not parts of a file).
-		//Files are then processed in affabeck regardless of their paths (I think that's how the game does it).
-		mapping files = ([]);
-		foreach (config_dirs, string base)
-			foreach (sort(get_dir(base + dir) || ({ })), string fn)
-				files[fn] = base + dir + "/" + fn;
-		array filenames = indices(files); sort(lower_case(filenames[*]), filenames); //Sort case insensitively? I think this is how it's to be done?
+		array filenames = list_config_dir(config_dirs, dir);
 		foreach (filenames, string fn) {
-			string data = Stdio.read_file(files[fn]) + "\n";
+			string data = Stdio.read_file(fn) + "\n";
 			if (fn == "DOM_Spain_Missions.txt") data += "}\n"; //HACK: As of 20230419, this file is missing a final close brace.
 			mapping cur = parse_eu4txt(data) || ([]);
 			if (key) cur = cur[key] || ([]);
@@ -256,12 +272,7 @@ class GameConfig {
 	}
 
 	protected void create(array(string) mod_filenames) {
-		foreach (mod_filenames, string fn) {
-			mapping info = parse_eu4txt(Stdio.read_file(G->LOCAL_PATH + "/" + fn));
-			string path = info->path; if (!path) continue;
-			if (!has_prefix(path, "/")) path = G->LOCAL_PATH + "/" + path;
-			config_dirs += ({path});
-		}
+		config_dirs = find_mod_directories(mod_filenames);
 		active_mods = mod_filenames * ",";
 		mapping gfx = low_parse_savefile("/interface/core.gfx");
 		//There might be multiple bitmapfonts entries. Logically, I think they should just be merged? Not sure.
@@ -551,4 +562,27 @@ class GameConfig {
 			}
 		}
 	}
+}
+
+void update_checksum(object hash, array(string) dirs, string dir, string tail, int recurse) {
+	foreach (list_config_dir(dirs, "/" + dir), string fn) {
+		if (has_suffix(fn, tail)) hash->update(Stdio.read_file(fn));
+		if (recurse && Stdio.is_dir(fn)) update_checksum(hash, dirs, fn, tail, 1);
+	}
+}
+
+string calculate_checksum(array(string) mod_filenames) {
+	array dirs = find_mod_directories(mod_filenames);
+	mapping manifest = parse_eu4txt(Stdio.read_file(G->PROGRAM_PATH + "/checksum_manifest.txt"));
+	//The hash stored in the EU4 files is the right length for MD5. However, simply using MD5
+	//here doesn't give the same result. It might be that it's not MD5, it might be that I'm
+	//processing the files in the wrong order, it might be that the file names themselves are
+	//included in the hash, or it might be something else entirely. Fortunately I don't need
+	//to perfectly match the hash (it would be nice, but it's not vital); I can just update
+	//everything any time I see a change.
+	//object hash = Crypto.MD5();
+	object hash = Crypto.SHA1(); //Nearly as fast as MD5 and probably a better choice. SHA256 is safer but unnecessary, and a lot slower.
+	foreach (manifest->directory, mapping dir)
+		update_checksum(hash, dirs, dir->name, dir->file_extension, dir->sub_directories);
+	return sprintf("%@x", (array)hash->digest());
 }
