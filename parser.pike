@@ -543,7 +543,7 @@ class GameConfig {
 		//Parse out localised province names and map from province ID to all its different names
 		province_localised_names = ([]);
 		foreach (sort(get_dir(G->PROGRAM_PATH + "/common/province_names")), string fn) {
-			mapping names = low_parse_savefile("/common/province_names/" + fn);
+			mapping names = parse_eu4txt(Stdio.read_file(G->PROGRAM_PATH + "/common/province_names/" + fn) + "\n");
 			string lang = L10n[fn - ".txt"] || fn; //Assuming that "castilian.txt" is the culture Castilian, and "TUR.txt" is the nation Ottomans
 			foreach (names; string prov; array|string name) {
 				if (arrayp(name)) name = name[0]; //The name can be [name, capitalname] but we don't care about the capital name
