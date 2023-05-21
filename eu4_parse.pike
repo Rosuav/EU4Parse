@@ -1896,61 +1896,42 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 	}
 }
 
-mapping(string:multiset(object)) connections = (["": (<>), "province": (<>)]);
+multiset(object) connections = (<>);
 mapping last_parsed_savefile;
 class Connection(Stdio.File sock) {
 	Stdio.Buffer incoming = Stdio.Buffer(), outgoing = Stdio.Buffer();
-	string notiftype = "";
-	string notify, highlight;
+	string notify;
 
 	protected void create() {
-		//write("%%%% Connection from %s\n", sock->query_address());
 		sock->set_buffer_mode(incoming, outgoing);
 		sock->set_nonblocking(sockread, 0, sockclosed);
 	}
-	void sockclosed() {connections[notiftype][this] = 0; sock->close();}
+	void sockclosed() {connections[this] = 0; sock->close();}
 
 	string find_country(mapping data, string country) {
 		foreach (data->players_countries / 2, [string name, string tag])
 			if (lower_case(country) == lower_case(name)) country = tag;
 		if (data->countries[country]) return country;
-		outgoing->sprintf("Player or tag %O not found - try%{ %O%} or any country tag\n", country, data->players_countries);
-		sock->write(""); //Force a write callback (shouldn't be necessary??)
-	}
-
-	void inform(mapping data) {
-		//A savefile has been parsed. Notify this socket (if applicable).
-		if (!notify) return;
-		string tag = find_country(data, notify); if (!tag) return;
-		analyze(data, notify, tag, outgoing->sprintf, (["highlight_interesting": highlight]));
-		analyze_wars(data, (<tag>), outgoing->sprintf);
-		sock->write(""); //Ditto
 	}
 
 	void provnotify(string country, int province) {
-		//A request has come in to notify a country to focus on a province.
+		//A request has come in (from the web) to notify a country to focus on a province.
 		if (!notify) return;
 		string tag = find_country(last_parsed_savefile, notify);
 		if (tag != country) return; //Not found, or not for us.
 		outgoing->sprintf("provfocus %d\n", province);
-		sock->write(""); //Ditto
+		sock->write(""); //Force a write callback (shouldn't be necessary??)
 	}
 
 	void cycle_provinces(string country) {
 		if (!last_parsed_savefile) return;
-		string id;
 		if (!G->G->provincecycle[country]) {
-			string tag = find_country(last_parsed_savefile, country); if (!tag) return;
-			if (!interesting_provinces[tag]) analyze(last_parsed_savefile, "Province finder", tag); //Should this be sent to /dev/null instead of the console?
-			if (!sizeof(interesting_provinces[tag])) {sock->close("w"); return;}
-			[id, array rest] = Array.shift(interesting_provinces[tag]);
-			interesting_provinces[tag] = rest + ({id});
+			sock->write("Need to select a cycle group before cycling provinces\n");
+			return;
 		}
-		else {
-			[id, array rest] = Array.shift(G->G->provincecycle[country]);
-			G->G->provincecycle[country] = rest + ({id});
-			G->webserver->update_group(country);
-		}
+		[string id, array rest] = Array.shift(G->G->provincecycle[country]);
+		G->G->provincecycle[country] = rest + ({id});
+		G->webserver->update_group(country);
 		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
 		//put a "shutdown write direction when done" marker into the Buffer.
 		sock->write("provfocus " + id + "\nexit\n");
@@ -1963,69 +1944,12 @@ class Connection(Stdio.File sock) {
 			sscanf(cmd, "%s %s", cmd, arg);
 			switch (cmd) {
 				case "notify":
-					connections[notiftype][this] = 0;
-					if (sscanf(arg, "province %s", arg)) notiftype = "province";
-					notify = arg; connections[notiftype][this] = 1;
-					if (notiftype == "" && last_parsed_savefile) inform(last_parsed_savefile);
+					connections[this] = 0;
+					if (sscanf(arg, "province %s", arg)) ; //notiftype = "province";
+					else sock->write("Warning: Old 'notify' no longer supported, using 'notify province' instead\n");
+					notify = arg; connections[this] = 1;
 					break;
 				case "province": cycle_provinces(arg); break;
-				case "highlight": case "hl": case "build": case "building": case "buildings": {
-					//Request highlighting of provinces in which a particular building could be built if you had a slot.
-					//Example: "highlight shipyard" ==> any province with no shipyard and no building slots gets highlighted.
-					//Typing "highlight" without an arg, or any invalid arg, will give a list of building IDs.
-					arg = replace(lower_case(arg), " ", "_");
-					if ((<"none", "off", "-">)[arg]) {
-						highlight = 0;
-						outgoing->sprintf("Highlighting disabled.\n");
-						sock->write("");
-						break;
-					}
-					string tag = last_parsed_savefile && find_country(last_parsed_savefile, notify);
-					if (!tag) break;
-					if (!CFG->building_types[arg]) {
-						array available = ({ });
-						mapping tech = last_parsed_savefile->countries[tag]->technology;
-						int have_mfg = 0;
-						foreach (CFG->building_types; string id; mapping bldg) {
-							[string techtype, int techlevel] = bldg->tech_required || ({"", 100}); //Ignore anything that's not a regular building
-							if ((int)tech[techtype] < techlevel) continue; //Hide IDs you don't have the tech to build
-							if (bldg->obsoleted_by) continue; //Show only the baseline building for each type
-							if (bldg->manufactory && !bldg->show_separate) {have_mfg = 1; continue;} //Collect regular manufactories under one name
-							if (bldg->influencing_fort) continue; //You won't want to check forts this way
-							available += ({id});
-						}
-						if (have_mfg) available += ({"manufactory"}); //Note that building_types->manufactory is technically valid
-						outgoing->sprintf("Valid IDs: %s\n", sort(available) * ", ");
-						outgoing->sprintf("Or use 'highlight none' to disable.\n");
-						sock->write("");
-						break;
-					}
-					//If you say "highlight stock_exchange", act as if you said "highlight marketplace".
-					while (string older = CFG->building_types[arg]->make_obsolete) arg = older;
-					highlight = arg;
-					analyze_findbuildings(last_parsed_savefile, notify, tag, outgoing->sprintf, arg);
-					sock->write("");
-					break;
-				}
-				case "flagship": case "flagships": case "flag": case "fs":
-					analyze_flagships(last_parsed_savefile, outgoing->sprintf);
-					sock->write("");
-					break;
-				case "war": case "wars": {
-					if (arg == "") {
-						foreach (last_parsed_savefile->active_war || ({ }), mapping war) {
-							outgoing->sprintf("\n\e[1;31m== War: %s - %s ==\e[0m\n", war->action, string_to_utf8(war->name));
-							if (war->attackers) outgoing->sprintf(string_to_utf8("\U0001f5e1\ufe0f %{ %s%}\n"), war->attackers);
-							if (war->defenders) outgoing->sprintf(string_to_utf8("\U0001f6e1\ufe0f %{ %s%}\n"), war->defenders);
-						}
-						sock->write("");
-						break;
-					}
-					string tag = find_country(last_parsed_savefile, arg); if (!tag) break;
-					analyze_wars(last_parsed_savefile, (<tag>), outgoing->sprintf);
-					sock->write("");
-					break;
-				}
 				default: sock->write(sprintf("Unknown command %O\n", cmd)); break;
 			}
 		}
@@ -2047,7 +1971,6 @@ void done_processing_savefile(object pipe, string msg) {
 	write("\nCurrent date: %s\n", data->date);
 	string mods = (data->mods_enabled_names||({}))->filename * ",";
 	G->G->mods_inconsistent = mods != CFG->active_mods;
-	indices(connections[""])->inform(data);
 	G->G->provincecycle = ([]);
 	last_parsed_savefile = data;
 	parsing = 0; G->webserver->send_updates_all();
