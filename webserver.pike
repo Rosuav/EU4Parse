@@ -420,7 +420,7 @@ void send_to_all(mapping sendme) {
 
 void update_group(string tag) {
 	array socks = websocket_groups[tag];
-	if (socks && sizeof(socks)) send_update(websocket_groups[tag], get_state(tag) | (["parsing": G->parsing && (G->parsing - 1) * 100 / G->PARSE_PROGRESS_FRACTION]));
+	if (socks && sizeof(socks)) send_update(websocket_groups[tag], get_state(tag) | (["parsing": G->parsing]));
 }
 void send_updates_all() {foreach (websocket_groups; string tag;) update_group(tag);}
 

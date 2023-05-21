@@ -1,5 +1,8 @@
-//Parsers - eventually all EU4 text files will be parsed in this file too
-
+//Parsers of various kinds, but mostly the EU4 Text format (used by config files,
+//save files, etc, etc). Can be invoked from the command line to parse a save file.
+#if !constant(G)
+mapping G = ([]); //Prevent compilation errors, but none of the G-> lookups will work
+#endif
 Parser.LR.Parser parser = Parser.LR.GrammarParser.make_parser_from_file("eu4_parse.grammar");
 
 int retain_map_indices = 0;
@@ -67,15 +70,13 @@ maparray makearray(mixed val) {return maparray()->addidx(val);}
 maparray addarray(maparray arr, mixed val) {return arr->addidx(val);}
 mapping emptymaparray() {return ([]);}
 
-mapping parse_eu4txt(string|Stdio.Buffer data, int|void verbose) {
+mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|void debug) {
 	if (stringp(data)) data = Stdio.Buffer(data); //NOTE: Restricted to eight-bit data. Since EU4 uses ISO-8859-1, that's not a problem. Be aware for future.
 	data->read_only();
+	if (progress_cb) progress_cb(-sizeof(data)); //Signal the start with a negative size
 	string ungetch;
-	int totsize = sizeof(data), fraction = totsize / G->PARSE_PROGRESS_FRACTION, nextmark = totsize - fraction;
-	object progress_pipe = G->progress_pipe;
 	string|array next() {
-		int progress = sizeof(data);
-		if (progress_pipe && progress < nextmark) {nextmark -= fraction; progress_pipe->write("+");}
+		if (progress_cb) progress_cb(sizeof(data));
 		if (string ret = ungetch) {ungetch = 0; return ret;}
 		data->sscanf("%*[ \t\r\n]");
 		while (data->sscanf( "#%*s\n%*[ \t\r\n]")); //Strip comments
@@ -110,7 +111,7 @@ mapping parse_eu4txt(string|Stdio.Buffer data, int|void verbose) {
 	}
 	string|array shownext() {mixed tok = next(); write("%O\n", tok); return tok;}
 	//while (shownext() != ""); return 0; //Dump tokens w/o parsing
-	return parser->parse(verbose ? shownext : next, this);
+	return parser->parse(debug ? shownext : next, this);
 }
 
 //File-like object that reads from a string. Potentially does a lot of string copying.
@@ -133,39 +134,6 @@ class StringFile(string basis) {
 	}
 	void stat() { } //No file system stats available.
 }
-
-mapping parse_savefile_string(string data, string|void filename) {
-	if (has_prefix(data, "PK\3\4")) {
-		//Compressed savefile. Consists of three files, one of which ("ai") we don't care
-		//about. The other two can be concatenated after stripping their "EU4txt" headers,
-		//and should be able to be parsed just like an uncompressed save. (The ai file is
-		//also the exact same format, so if it's ever needed, just add a third sscanf.)
-		object zip = Filesystem.Zip._Zip(StringFile(data));
-		sscanf(zip->read("meta") || "", "EU4txt%s", string meta);
-		sscanf(zip->read("gamestate") || "", "EU4txt%s", string state);
-		if (meta && state) data = meta + state; else return 0;
-	}
-	else if (!sscanf(data, "EU4txt%s", data)) return 0;
-	if (filename) write("Reading save file %s (%d bytes)...\n", filename, sizeof(data));
-	return parse_eu4txt(data);
-}
-
-mapping parse_savefile(string data, string|void filename) {
-	sscanf(Crypto.SHA256.hash(data), "%32c", int hash);
-	string hexhash = sprintf("%64x", hash);
-	mapping cache = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}");
-	if (cache->hash == hexhash) return cache->data;
-	mapping ret = parse_savefile_string(data, filename);
-	if (!ret) return 0; //Probably an Ironman save (binary format, can't be parsed by this system).
-	foreach (ret->countries; string tag; mapping c) {
-		c->tag = tag; //When looking at a country, it's often convenient to know its tag (reverse linkage).
-		c->owned_provinces = Array.arrayify(c->owned_provinces); //Several things will crash if you don't have a provinces array
-	}
-	foreach (ret->provinces; string id; mapping prov) prov->id = -(int)id;
-	Stdio.write_file("eu4_parse.json", string_to_utf8(Standards.JSON.encode((["hash": hexhash, "data": ret]))));
-	return ret;
-}
-
 
 mapping(string:Image.Image) image_cache = ([]);
 Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
@@ -585,4 +553,74 @@ string calculate_checksum(array(string) mod_filenames) {
 	foreach (manifest->directory, mapping dir)
 		update_checksum(hash, dirs, dir->name, dir->file_extension, dir->sub_directories);
 	return sprintf("%@x", (array)hash->digest());
+}
+
+Stdio.File pipe;
+int totsize, fraction, nextmark, percentage;
+void progress(int remaining) {
+	if (remaining < 0) {
+		//New parse just started.
+		totsize = nextmark = -remaining;
+		fraction = totsize / 100; //Rounds down, so the odd few bytes at the end will go above 100% very very briefly
+		percentage = -1;
+	}
+	if (remaining < nextmark) {
+		++percentage;
+		nextmark -= fraction;
+		pipe->write((string)({percentage}));
+	}
+}
+
+mapping parse_savefile_string(string data, string|void filename) {
+	if (has_prefix(data, "PK\3\4")) {
+		//Compressed savefile. Consists of three files, one of which ("ai") we don't care
+		//about. The other two can be concatenated after stripping their "EU4txt" headers,
+		//and should be able to be parsed just like an uncompressed save. (The ai file is
+		//also the exact same format, so if it's ever needed, just add a third sscanf.)
+		object zip = Filesystem.Zip._Zip(StringFile(data));
+		sscanf(zip->read("meta") || "", "EU4txt%s", string meta);
+		sscanf(zip->read("gamestate") || "", "EU4txt%s", string state);
+		if (meta && state) data = meta + state; else return 0;
+	}
+	else if (!sscanf(data, "EU4txt%s", data)) return 0;
+	if (filename) write("Reading save file %s (%d bytes)...\n", filename, sizeof(data));
+	return parse_eu4txt(data, pipe && progress);
+}
+
+mapping parse_savefile(string data, string|void filename) {
+	sscanf(Crypto.SHA256.hash(data), "%32c", int hash);
+	string hexhash = sprintf("%64x", hash);
+	mapping cache = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}");
+	if (cache->hash == hexhash) return cache->data;
+	mapping ret = parse_savefile_string(data, filename);
+	if (!ret) return 0; //Probably an Ironman save (binary format, can't be parsed by this system).
+	foreach (ret->countries; string tag; mapping c) {
+		c->tag = tag; //When looking at a country, it's often convenient to know its tag (reverse linkage).
+		c->owned_provinces = Array.arrayify(c->owned_provinces); //Several things will crash if you don't have a provinces array
+	}
+	foreach (ret->provinces; string id; mapping prov) prov->id = -(int)id;
+	Stdio.write_file("eu4_parse.json", string_to_utf8(Standards.JSON.encode((["hash": hexhash, "data": ret]))));
+	return ret;
+}
+
+//Pipe protocol:
+//From main to us: File name followed by "\n". As soon as we receive the \n, we process the file.
+//From us to main: Progress markers consisting of single byte values from 0x00 to 0x64 (0% to 100%),
+//with theoretical possibility for 0x65 (101%) in the case of rounding error; and 0x7e ("~") when
+//the file is completely parsed and saved into the cache.
+void piperead(object pipe, object incoming) {
+	while (array ret = incoming->sscanf("%s\n")) {
+		[string fn] = ret;
+		string raw = Stdio.read_file(fn); //Assumes ISO-8859-1, which I think is correct
+		if (parse_savefile(raw, basename(fn))) pipe->write("~"); //Signal the parent. It can read it back from the cache.
+	}
+}
+
+int main() {
+	//Parser subprocess, invoked by parent for asynchronous parsing.
+	pipe = Stdio.File(3); //We should have been given fd 3 as a pipe
+	Stdio.Buffer incoming = Stdio.Buffer(), outgoing = Stdio.Buffer();
+	pipe->set_buffer_mode(incoming, outgoing);
+	pipe->set_nonblocking(piperead, 0, pipe->close);
+	return -1;
 }

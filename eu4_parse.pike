@@ -39,9 +39,6 @@ constant SAVE_PATH = LOCAL_PATH + "/save games";
 constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"; //Append /map or /common etc to access useful data files
 
 mapping G = ([]);
-
-object progress_pipe;
-constant PARSE_PROGRESS_FRACTION = 20; //Report at 1/20, 2/20, 3/20 etc of progress
 object CFG;
 
 string L10N(string key) {return CFG->L10n[key] || key;}
@@ -1959,31 +1956,21 @@ class Connection(Stdio.File sock) {
 void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
 Stdio.File parser_pipe = Stdio.File();
-int parsing = 0;
-void process_savefile(string fn) {parsing = 1; G->webserver->send_updates_all(); parser_pipe->write(fn + "\n");}
+int parsing = -1;
+void process_savefile(string fn) {parsing = 0; G->webserver->send_updates_all(); parser_pipe->write(fn + "\n");}
 void done_processing_savefile(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
-	//TODO: Deduplicate parsing definition with the main update handler
-	if (has_value(msg, '+')) {++parsing; G->webserver->send_to_all((["cmd": "update", "parsing": parsing && (parsing - 1) * 100 / PARSE_PROGRESS_FRACTION]));}
-	if (!has_value(msg, '*')) return;
-	mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
-	if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
-	write("\nCurrent date: %s\n", data->date);
-	string mods = (data->mods_enabled_names||({}))->filename * ",";
-	G->G->mods_inconsistent = mods != CFG->active_mods;
-	G->G->provincecycle = ([]);
-	last_parsed_savefile = data;
-	parsing = 0; G->webserver->send_updates_all();
-}
-
-class PipeConnection {
-	inherit Connection;
-	void sockread() {
-		progress_pipe = sock;
-		while (array ret = incoming->sscanf("%s\n")) {
-			[string fn] = ret;
-			string raw = Stdio.read_file(fn); //Assumes ISO-8859-1, which I think is correct
-			if (G->parser->parse_savefile(raw, basename(fn))) sock->write("*"); //Signal the parent. It can read it back from the cache.
+	foreach ((array)msg, int chr) {
+		if (chr <= 100) {parsing = chr; G->webserver->send_to_all((["cmd": "update", "parsing": parsing]));}
+		if (chr == '~') {
+			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
+			if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
+			write("\nCurrent date: %s\n", data->date);
+			string mods = (data->mods_enabled_names||({}))->filename * ",";
+			G->G->mods_inconsistent = mods != CFG->active_mods;
+			G->G->provincecycle = ([]);
+			last_parsed_savefile = data;
+			parsing = -1; G->webserver->send_updates_all();
 		}
 	}
 }
@@ -2177,13 +2164,8 @@ int main(int argc, array(string) argv) {
 	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
 	add_constant("get_savefile_info", get_savefile_info);
 	add_constant("L10N", L10N);
-	G->parser = compile_file("parser.pike")("parser"); //Needed for the parser process as well as the main
+	G->parser = compile_file("parser.pike")("parser"); //Needed for special modes as well as the main
 
-	if (argc > 1 && argv[1] == "--parse") {
-		//Parser subprocess, invoked by parent for asynchronous parsing.
-		PipeConnection(Stdio.File(3)); //We should have been given fd 3 as a pipe
-		return -1;
-	}
 	if (argc > 1 && argv[1] == "--timeparse") {
 		string fn = argc > 2 ? argv[2] : "mp_autosave.eu4";
 		object start = System.Timer();
@@ -2318,7 +2300,7 @@ log = \"PROV-TERRAIN-END\"
 	if (mappingp(cfg) && cfg->tag_preferences) G->webserver->tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) G->webserver->effect_display_mode = cfg->effect_display_mode;
 
-	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
+	object proc = Process.spawn_pike(({"parser.pike"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
 	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
 	array(string) files = SAVE_PATH + "/" + get_dir(SAVE_PATH)[*];
