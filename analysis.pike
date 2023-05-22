@@ -300,12 +300,12 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	mapping country = data->countries[prov->owner];
 	mapping modifiers = (["_sources": ([])]);
 	if (prov->center_of_trade) {
-		string type = G->province_info[(string)id]->?has_port ? "coastal" : "inland";
+		string type = G->CFG->province_info[(string)id]->?has_port ? "coastal" : "inland";
 		mapping cot = G->CFG->cot_definitions[type + prov->center_of_trade];
 		_incorporate(data, modifiers, "Level " + prov->center_of_trade + " COT", cot->?province_modifiers);
 	}
 	if (int l3cot = country->area_has_level3[?G->CFG->prov_area[(string)id]]) {
-		string type = G->province_info[(string)l3cot]->?has_port ? "coastal3" : "inland3";
+		string type = G->CFG->province_info[(string)l3cot]->?has_port ? "coastal3" : "inland3";
 		mapping cot = G->CFG->cot_definitions[type];
 		_incorporate(data, modifiers, "L3 COT in area", cot->?state_modifiers);
 	}
@@ -316,8 +316,8 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		if (state->prosperity == "100.000") _incorporate(data, modifiers, "Prosperity", G->CFG->static_modifiers->prosperity);
 		_incorporate(data, modifiers, "State edict - " + L10N(state->active_edict->?which), G->CFG->state_edicts[state->active_edict->?which]);
 	}
-	_incorporate(data, modifiers, "Terrain", G->CFG->terrain_definitions->categories[G->province_info[(string)id]->terrain]);
-	_incorporate(data, modifiers, "Climate", G->CFG->static_modifiers[G->province_info[(string)id]->climate]);
+	_incorporate(data, modifiers, "Terrain", G->CFG->terrain_definitions->categories[G->CFG->province_info[(string)id]->terrain]);
+	_incorporate(data, modifiers, "Climate", G->CFG->static_modifiers[G->CFG->province_info[(string)id]->climate]);
 	if (prov->hre) {
 		foreach (Array.arrayify(data->empire->passed_reform), string reform)
 			_incorporate(data, modifiers, "HRE province (" + L10N(reform) + ")", G->CFG->imperial_reforms[reform]->?province);
@@ -514,7 +514,7 @@ void analyze_leviathans(mapping data, string name, string tag, mapping write) {
 int count_building_slots(mapping data, string id) {
 	//Count building slots. Not perfect. Depends on the CoTs being provided accurately.
 	//Doesn't always give the terrain bonus.
-	int slots = 2 + G->building_slots[id]; //All cities get 2, plus possibly a bonus from terrain and/or a penalty from climate.
+	int slots = 2 + G->CFG->building_slots[id]; //All cities get 2, plus possibly a bonus from terrain and/or a penalty from climate.
 	mapping prov = data->provinces["-" + id];
 	if (prov->buildings->?university) ++slots; //A university effectively doesn't consume a slot.
 	if (data->countries[prov->owner]->?area_has_level3[?G->CFG->prov_area[id]]) ++slots; //A level 3 CoT in the state adds a building slot
@@ -529,7 +529,7 @@ void analyze_furnace(mapping data, string name, string tag, mapping write) {
 	array coalprov = ({ });
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
-		if (!G->province_info[id]->has_coal) continue;
+		if (!G->CFG->province_info[id]->has_coal) continue;
 		int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
 		mapping bldg = prov->buildings || ([]);
 		mapping mfg = bldg & G->CFG->manufactories;
@@ -635,7 +635,7 @@ void analyze_findbuildings(mapping data, string name, string tag, mapping write,
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
 		//Building shipyards in inland provinces isn't very productive
-		if (G->CFG->building_types[highlight]->build_trigger->?has_port && !G->province_info[id]->?has_port) continue;
+		if (G->CFG->building_types[highlight]->build_trigger->?has_port && !G->CFG->province_info[id]->?has_port) continue;
 		mapping bldg = prov->buildings || ([]);
 		int slots = count_building_slots(data, id);
 		int buildings = sizeof(bldg);
@@ -1175,7 +1175,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				"effects": effects,
 			]);
 		} - ({0});
-		mapping provinfo = G->province_info[id - "-"];
+		mapping provinfo = G->CFG->province_info[id - "-"];
 		mapping terraininfo = G->CFG->terrain_definitions->categories[provinfo->terrain] || ([]);
 		mapping climateinfo = G->CFG->static_modifiers[provinfo->climate] || ([]);
 		colonization_targets += ({([
@@ -1410,9 +1410,9 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"discovered": has_value(Array.arrayify(prov->discovered_by), tag),
 			"controller": prov->controller, "owner": prov->owner,
 			"name": prov->name,
-			"wet": G->CFG->terrain_definitions->categories[G->province_info[id - "-"]->?terrain]->?is_water,
-			"terrain": G->province_info[id - "-"]->?terrain,
-			"climate": G->province_info[id - "-"]->?climate,
+			"wet": G->CFG->terrain_definitions->categories[G->CFG->province_info[id - "-"]->?terrain]->?is_water,
+			"terrain": G->CFG->province_info[id - "-"]->?terrain,
+			"climate": G->CFG->province_info[id - "-"]->?climate,
 			//"raw": prov,
 		])});
 	};
@@ -1477,7 +1477,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		affect(culture, "manpower", mp, autonomy, impact);
 		//Sailors are 60 per base dev _of any kind_, with a manufactory. They also have
 		//different percentage impact for culture discrepancies.
-		int sailors = G->province_info[id]->?has_port && dev * 60;
+		int sailors = G->CFG->province_info[id]->?has_port && dev * 60;
 		impact = culture->status == "brother" ? 100 * !cultural_union
 			: culture->status == "foreign" ? 200 - is_republic : 0;
 		if (prov->buildings->?impressment_offices)

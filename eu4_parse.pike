@@ -47,9 +47,6 @@ void bootstrap(string module) {
 	G[module] = compiled;
 }
 
-mapping building_slots = ([]); //TODO: Move this into CFG (when province data moves there)
-mapping province_info; //TODO: Migrate into CFG
-
 multiset(object) connections = (<>);
 mapping last_parsed_savefile;
 class Connection(Stdio.File sock) {
@@ -172,107 +169,6 @@ int main(int argc, array(string) argv) {
 	//handling of dependencies.
 	array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
 	CFG = G->parser->GameConfig(active_mods);
-
-	/* It is REALLY REALLY hard to replicate the game's full algorithm for figuring out which terrain each province
-	has. So, instead, let's ask for a little help - from the game, and from the human. And then save the results.
-	Unfortunately, it's not possible (as of v1.31) to do an every_province scope that reports the province ID in a
-	log message. It also doesn't seem to be possible to iterate over all provinces and increment a counter, as the
-	every_province scope skips sea provinces (which still consume province IDs).
-	I would REALLY like to do something like this:
-	every_province = {
-		limit = {
-			has_terrain = steppe
-			is_wasteland = no
-		}
-		log = "PROV-TERRAIN: steppe [This.ID] [This.GetName]"
-	}
-	
-	and repeat for each terrain type. A technique others have done is to cede the provinces to different countries,
-	save, and parse the savefile; this is slow, messy, and mutates the save, so it won't be very useful in Random
-	New World. (Not that I'm going to try to support RNW, but it should be easier this way if I do in the future.)
-
-	Since we can't do it the easy way, let's do it the hard way instead. For each province ID, for each terrain, if
-	the province has that terrain, log a message. If it's stupid, but it works........ no, it's still stupid.
-
-	TODO: Mark the log (maybe in PROV-TERRAIN-BEGIN) with the EU4 version, permanently notice this, and key the
-	cache by the version. That way it won't be a problem if there are province changes and you switch back and
-	forth across the update. This could then move into the CFG object.
-	*/
-	province_info = Standards.JSON.decode(Stdio.read_file(".eu4_provinces.json") || "0");
-	if (!mappingp(province_info)) {
-		//Build up a script file to get the info we need.
-		//We assume that every province that could be of interest to us will be in an area.
-		Stdio.File script = Stdio.File(G->globals->LOCAL_PATH + "/prov.txt", "wct");
-		script->write("log = \"PROV-TERRAIN-BEGIN\"\n");
-		foreach (sort(indices(CFG->prov_area)), string provid) {
-			script->write(
-#"%s = {
-	set_variable = { which = terrain_reported value = -1 }
-	if = {
-		limit = {
-			OR = {
-				trade_goods = coal
-				has_latent_trade_goods = coal
-			}
-		}
-		log = \"PROV-TERRAIN: %<s has_coal=1\"
-	}
-	if = {
-		limit = { has_port = yes is_wasteland = no }
-		log = \"PROV-TERRAIN: %<s has_port=1\"
-	}
-", provid);
-			foreach (CFG->terrain_definitions->categories; string type; mapping info) {
-				script->write(
-#"	if = {
-		limit = { has_terrain = %s is_wasteland = no }
-		log = \"PROV-TERRAIN: %s terrain=%[0]s\"
-	}
-", type, provid);
-			}
-			foreach (CFG->climates; string type; mixed info) if (arrayp(info)) {
-				script->write(
-#"	if = {
-		limit = { has_climate = %s is_wasteland = no }
-		log = \"PROV-TERRAIN: %s climate=%[0]s\"
-	}
-", type, provid);
-			}
-			script->write("}\n");
-		}
-		//For reasons of paranoia, iterate over all provinces and make sure we reported their
-		//terrain types.
-		script->write(#"
-every_province = {
-	limit = { check_variable = { which = terrain_reported value = 0 } is_wasteland = no }
-	log = \"PROV-TERRAIN-ERROR: Terrain not reported for province [This.GetName]\"
-}
-log = \"PROV-TERRAIN-END\"
-");
-		script->close();
-		//See if the script's already been run (yes, we rebuild the script every time - means you
-		//can rerun it in case there've been changes), and if so, parse and save the data.
-		string log = Stdio.read_file(G->globals->LOCAL_PATH + "/logs/game.log") || "";
-		if (!has_value(log, "PROV-TERRAIN-BEGIN") || !has_value(log, "PROV-TERRAIN-END"))
-			exit(0, "Please open up EU4 and, in the console, type: run prov.txt\n");
-		string terrain = ((log / "PROV-TERRAIN-BEGIN")[-1] / "PROV-TERRAIN-END")[0];
-		province_info = ([]);
-		foreach (terrain / "\n", string line) {
-			//Lines look like this:
-			//[effectimplementation.cpp:21960]: EVENT [1444.11.11]:PROV-TERRAIN: drylands 224 - Sevilla
-			sscanf(line, "%*sPROV-TERRAIN: %d %s=%s", int provid, string key, string val);
-			if (!provid) continue;
-			mapping pt = province_info[(string)provid] || ([]); province_info[(string)provid] = pt;
-			pt[key] = String.trim(val);
-		}
-		Stdio.write_file(".eu4_provinces.json", Standards.JSON.encode(province_info));
-	}
-	foreach (province_info; string id; mapping provinfo) {
-		mapping terraininfo = CFG->terrain_definitions->categories[provinfo->terrain];
-		if (int slots = (int)terraininfo->?allowed_num_of_buildings) building_slots[id] += slots;
-		mapping climateinfo = CFG->static_modifiers[provinfo->climate];
-		if (int slots = (int)climateinfo->?allowed_num_of_buildings) building_slots[id] += slots;
-	}
 
 	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
