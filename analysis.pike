@@ -1644,7 +1644,7 @@ void analyze_flagships(mapping data, mapping write) {
 }
 
 void analyze_wars(mapping data, multiset(string) tags, mapping write) {
-	write->wars = (["current": ({ }), "rumoured": G->war_rumours]);
+	write->wars = (["current": ({ }), "rumoured": G->G->war_rumours]);
 	foreach (values(data->active_war || ({ })), mapping war) {
 		if (!mappingp(war)) continue; //Dunno what's with these, there seem to be some strings in there.
 		//To keep displaying the war after all players separate-peace out, use

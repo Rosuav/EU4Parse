@@ -106,6 +106,7 @@ void watch_game_log(object inot) {
 	object log = Stdio.File(logfn);
 	log->set_nonblocking();
 	string data = "";
+	G->G->recent_peace_treaties = G->G->war_rumours = ({ });
 	void parse() {
 		data += log->read();
 		while (sscanf(data, "%s\n%s", string line, data)) {
@@ -116,9 +117,9 @@ void watch_game_log(object inot) {
 				//TODO: Tag something so that, the next time we see a save file, we augment the
 				//peace info with the participants, the peace treaty value (based on truce length),
 				//and the name of the war. Should be possible to match on the date (beginning of line).
-				G->recent_peace_treaties = ({parse_text_markers(line)}) + G->recent_peace_treaties;
-				write("\e[1mPEACE:\e[0m %s\n", string_to_utf8(render_text(G->recent_peace_treaties[0])));
-				sendme->recent_peace_treaties = G->recent_peace_treaties;
+				array info = parse_text_markers(line);
+				sendme->recent_peace_treaties = G->G->recent_peace_treaties = ({info}) + G->G->recent_peace_treaties;
+				write("\e[1mPEACE:\e[0m %s\n", string_to_utf8(render_text(info)));
 			}
 			if (sscanf(line, "%d %s %d - %s is preparing to attack %s.",
 					int day, string mon, int year, string aggressor, string defender) && defender) {
@@ -126,13 +127,13 @@ void watch_game_log(object inot) {
 				//someone's a babbling buffoon.
 				int month = search("January February March April May June July August September October November December" / " ", mon) + 1;
 				if (!month) werror("\e[1;33mRUMOUR FAIL - bad month %O\n", mon);
-				G->war_rumours += ({([
+				G->G->war_rumours += ({([
 					"atk": aggressor, "def": defender,
 					"rumoured": sprintf("%d.%02d.%02d", year, month, day),
 				])});
 				write("\e[1;33mRUMOUR:\e[0m %s is planning to attack %s [%02d %s %d]\n",
 					string_to_utf8(aggressor), string_to_utf8(defender), day, mon, year);
-				sendme->war_rumours = G->war_rumours;
+				sendme->war_rumours = G->G->war_rumours;
 			}
 			if (sscanf(line, "%d %s %d - %s started the %s against %s.",
 					int day, string mon, int year, string aggressor, string war, string defender) && defender) {
@@ -141,7 +142,7 @@ void watch_game_log(object inot) {
 				if (!month) werror("\e[1;33mWAR FAIL - bad month %O\n", mon);
 				string last_year = sprintf("%d.%02d.%02d", year - 1, month, day); //Note that this date might not exist; it's just for the inequality check. It's fine to ask if a date is more recent than 29th Feb 1447.
 				mapping found;
-				foreach (G->war_rumours, mapping r) {
+				foreach (G->G->war_rumours, mapping r) {
 					if (r->atk == aggressor && r->def == defender && r->rumoured > last_year)
 						found = r; //Don't break though; keep the last match.
 				}
@@ -150,7 +151,7 @@ void watch_game_log(object inot) {
 					found->declared = sprintf("%d.%02d.%02d", year, month, day);
 					write("\e[1;31mACTUAL WAR:\e[0m %s has attacked %s [%s --> %s]\n",
 						string_to_utf8(aggressor), string_to_utf8(defender), found->rumoured, found->declared);
-					sendme->war_rumours = G->war_rumours;
+					sendme->war_rumours = G->G->war_rumours;
 				}
 			}
 			if (sscanf(line, "%d %s %d - %s has gone bankrupt%s",
@@ -169,7 +170,7 @@ void watch_game_log(object inot) {
 			//File seems to have been truncated. Note that this won't catch
 			//deleting the file and creating a new one.
 			log->seek(0);
-			G->recent_peace_treaties = G->war_rumours = ({ });
+			G->G->recent_peace_treaties = G->G->war_rumours = ({ });
 		}
 		parse();
 		pos = log->tell();

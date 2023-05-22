@@ -52,7 +52,6 @@ void bootstrap(string module) {
 }
 
 mapping building_slots = ([]); //TODO: Move this into CFG (when province data moves there)
-array war_rumours = ({ });
 mapping province_info; //TODO: Migrate into CFG
 
 multiset(object) connections = (<>);
@@ -136,8 +135,6 @@ void done_processing_savefile(object pipe, string msg) {
 		}
 	}
 }
-
-array recent_peace_treaties = ({ }); //Recent peace treaties only, but hopefully useful
 
 int main(int argc, array(string) argv) {
 	add_constant("G", this);
