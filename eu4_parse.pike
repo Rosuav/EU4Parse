@@ -37,67 +37,7 @@ void bootstrap(string module) {
 	G[module] = compiled;
 }
 
-multiset(object) connections = (<>);
 mapping last_parsed_savefile;
-class Connection(Stdio.File sock) {
-	Stdio.Buffer incoming = Stdio.Buffer(), outgoing = Stdio.Buffer();
-	string notify;
-
-	protected void create() {
-		sock->set_buffer_mode(incoming, outgoing);
-		sock->set_nonblocking(sockread, 0, sockclosed);
-	}
-	void sockclosed() {connections[this] = 0; sock->close();}
-
-	string find_country(mapping data, string country) {
-		foreach (data->players_countries / 2, [string name, string tag])
-			if (lower_case(country) == lower_case(name)) country = tag;
-		if (data->countries[country]) return country;
-	}
-
-	void provnotify(string country, int province) {
-		//A request has come in (from the web) to notify a country to focus on a province.
-		if (!notify) return;
-		string tag = find_country(last_parsed_savefile, notify);
-		if (tag != country) return; //Not found, or not for us.
-		outgoing->sprintf("provfocus %d\n", province);
-		sock->write(""); //Force a write callback (shouldn't be necessary??)
-	}
-
-	void cycle_provinces(string country) {
-		if (!last_parsed_savefile) return;
-		if (!G->G->provincecycle[country]) {
-			sock->write("Need to select a cycle group before cycling provinces\n");
-			return;
-		}
-		[string id, array rest] = Array.shift(G->G->provincecycle[country]);
-		G->G->provincecycle[country] = rest + ({id});
-		G->connection->update_group(country);
-		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
-		//put a "shutdown write direction when done" marker into the Buffer.
-		sock->write("provfocus " + id + "\nexit\n");
-		sock->close("w");
-	}
-
-	void sockread() {
-		while (array ret = incoming->sscanf("%s\n")) {
-			string cmd = String.trim(ret[0]), arg = "";
-			sscanf(cmd, "%s %s", cmd, arg);
-			switch (cmd) {
-				case "notify":
-					connections[this] = 0;
-					if (sscanf(arg, "province %s", arg)) ; //notiftype = "province";
-					else sock->write("Warning: Old 'notify' no longer supported, using 'notify province' instead\n");
-					notify = arg; connections[this] = 1;
-					break;
-				case "province": cycle_provinces(arg); break;
-				default: sock->write(sprintf("Unknown command %O\n", cmd)); break;
-			}
-		}
-	}
-}
-
-void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
 Stdio.File parser_pipe = Stdio.File();
 int parsing = -1;
@@ -166,7 +106,5 @@ int main(int argc, array(string) argv) {
 	array(string) files = G->globals->SAVE_PATH + "/" + get_dir(G->globals->SAVE_PATH)[*];
 	sort(file_stat(files[*])->mtime, files);
 	if (sizeof(files)) process_savefile(files[-1]);
-	Stdio.Port mainsock = Stdio.Port();
-	mainsock->bind(1444, sock_connected, "::", 1);
 	return -1;
 }
