@@ -804,7 +804,7 @@ export function render(state) {
 	]);
 
 	if (state.error) {
-		replace_content("#error", [state.error, state.parsing !== -1 ? state.parsing + "%" : ""]).classList.remove("hidden");
+		replace_content("#error", [state.error, state.parsing > -1 ? state.parsing + "%" : ""]).classList.remove("hidden");
 		return;
 	}
 	replace_content("#error", "").classList.add("hidden");
