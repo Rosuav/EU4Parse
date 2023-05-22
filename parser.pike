@@ -394,7 +394,7 @@ class GameConfig {
 						idea->effectname = L10n["YEARLY_" + ueff] || L10n["MODIFIER_" + ueff]
 							|| L10n[eff] || L10n[ueff] || L10n[ueff + "_MOD"]
 							|| sprintf("%s (%s)", L10n[ids[i]], eff);
-						idea->effectvalue = stringp(idea[eff]) ? G->threeplace(idea[eff]) : idea[eff];
+						idea->effectvalue = stringp(idea[eff]) ? threeplace(idea[eff]) : idea[eff];
 					}
 					//idea->_index = custom_ideas && sizeof(custom_ideas); //useful for debugging
 					idea->category = cat;
@@ -508,7 +508,7 @@ class GameConfig {
 		military_tech_levels = ({ });
 		foreach (tech_definitions->mil->technology; int lvl; mapping tech) {
 			foreach (cumul; string k; string cur)
-				cumul[k] = cur + G->threeplace(tech[k]);
+				cumul[k] = cur + threeplace(tech[k]);
 			foreach (Array.arrayify(tech->enable), string un) {
 				mapping unit = unit_definitions[un];
 				int pips = (int)unit->offensive_morale + (int)unit->defensive_morale

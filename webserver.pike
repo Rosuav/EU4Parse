@@ -112,7 +112,7 @@ void websocket_cmd_highlight(mapping conn, mapping data) {
 
 void websocket_cmd_fleetpower(mapping conn, mapping data) {
 	mapping prefs = persist_path(conn->group);
-	prefs->fleetpower = G->threeplace(data->power) || 1000;
+	prefs->fleetpower = threeplace(data->power) || 1000;
 	persist_save(); update_group(conn->group);
 }
 
@@ -285,11 +285,11 @@ mapping get_state(string group) {
 	if (!country) return (["error": "Country/player not found: " + group]);
 	mapping ret = (["tag": tag, "self": data->countries[tag], "highlight": ([]), "recent_peace_treaties": recent_peace_treaties]);
 	ret->capital_province = data->provinces["-" + data->countries[tag]->capital];
-	G->analyze(data, group, tag, ret, persist_path(group));
+	G->G->analysis->analyze(data, group, tag, ret, persist_path(group));
 	multiset players = (multiset)((data->players_countries || ({ })) / 2)[*][1]; //Normally, show all wars involving players.
 	if (!players[tag]) players = (<tag>); //But if you switch to a non-player country, show that country's wars instead.
-	G->analyze_wars(data, players, ret);
-	G->analyze_flagships(data, ret);
+	G->G->analysis->analyze_wars(data, players, ret);
+	G->G->analysis->analyze_flagships(data, ret);
 	//Enumerate available building types for highlighting. TODO: Check if some changes here need to be backported to the console interface.
 	mapping available = ([]);
 	mapping tech = country->technology;
