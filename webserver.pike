@@ -425,5 +425,9 @@ void update_group(string tag) {
 void send_updates_all() {foreach (websocket_groups; string tag;) update_group(tag);}
 
 protected void create(string name) {
+	mapping cfg = ([]);
+	catch {cfg = Standards.JSON.decode(Stdio.read_file(".eu4_preferences.json"));};
+	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
+	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");
 }

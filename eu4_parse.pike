@@ -449,11 +449,6 @@ log = \"PROV-TERRAIN-END\"
 		if (int slots = (int)climateinfo->?allowed_num_of_buildings) building_slots[id] += slots;
 	}
 
-	mapping cfg = ([]);
-	catch {cfg = Standards.JSON.decode(Stdio.read_file(".eu4_preferences.json"));};
-	if (mappingp(cfg) && cfg->tag_preferences) G->webserver->tag_preferences = cfg->tag_preferences;
-	if (mappingp(cfg) && cfg->effect_display_mode) G->webserver->effect_display_mode = cfg->effect_display_mode;
-
 	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
 	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
