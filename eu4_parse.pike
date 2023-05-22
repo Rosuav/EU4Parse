@@ -2149,6 +2149,7 @@ int main(int argc, array(string) argv) {
 	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
 	add_constant("get_savefile_info", get_savefile_info);
 	add_constant("L10N", L10N);
+	compile_file("globals.pike")("globals");
 	G->parser = compile_file("parser.pike")("parser"); //Needed for special modes as well as the main
 
 	if (argc > 1 && argv[1] == "--timeparse") {
