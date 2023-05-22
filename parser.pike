@@ -552,7 +552,7 @@ string calculate_checksum(array(string) mod_filenames) {
 	object hash = Crypto.SHA1(); //Nearly as fast as MD5 and probably a better choice. SHA256 is safer but unnecessary, and a lot slower.
 	foreach (manifest->directory, mapping dir)
 		update_checksum(hash, dirs, dir->name, dir->file_extension, dir->sub_directories);
-	return sprintf("%@x", (array)hash->digest());
+	return sprintf("%@02x", (array)hash->digest());
 }
 
 Stdio.File pipe;
