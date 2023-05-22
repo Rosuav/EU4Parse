@@ -41,6 +41,16 @@ constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"
 mapping G = ([]);
 object CFG;
 
+void bootstrap(string module) {
+	program|object compiled;
+	mixed ex = catch {compiled = compile_file(module + ".pike");};
+	if (ex) {werror("Exception in compile!\n%s\n", ex->describe()); return 0;}
+	if (!compiled) werror("Compilation failed for %s\n", module);
+	if (mixed ex = catch {compiled = compiled(module);}) werror(describe_backtrace(ex) + "\n");
+	werror("Bootstrapped %s.pike\n", module);
+	G[module] = compiled;
+}
+
 mapping building_slots = ([]); //TODO: Move this into CFG (when province data moves there)
 array war_rumours = ({ });
 mapping province_info; //TODO: Migrate into CFG
@@ -315,8 +325,8 @@ int main(int argc, array(string) argv) {
 	add_constant("G", this);
 	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
 	add_constant("get_savefile_info", get_savefile_info);
-	compile_file("globals.pike")("globals");
-	G->parser = compile_file("parser.pike")("parser"); //Needed for special modes as well as the main
+	bootstrap("globals");
+	bootstrap("parser");
 
 	if (argc > 1 && argv[1] == "--parse") return G->parser->main();
 	if (argc > 1 && argv[1] == "--timeparse") {
@@ -336,8 +346,8 @@ int main(int argc, array(string) argv) {
 		werror("Time %O\n", tm->get());
 		return 0;
 	}
-	G->webserver = compile_file("webserver.pike")("webserver"); //Only needed for the main entrypoint
-	G->analysis = compile_file("analysis.pike")("analysis");
+	bootstrap("webserver"); //Only needed for the main entrypoint
+	bootstrap("analysis");
 
 	//Load up some info that is presumed to not change. If you're tweaking a game mod, this may break.
 	//In general, if you've made any change that could affect things, restart the parser to force it
