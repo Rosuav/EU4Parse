@@ -6,20 +6,7 @@
 //Note that analyzing may mutate the savefile mapping, but only to cache information
 //that would not change without the savefile itself changing.
 
-enum {PRIO_UNSET, PRIO_SITUATIONAL, PRIO_IMMEDIATE, PRIO_EXPLICIT}; //Deprecated, probably won't be needed with no telnet
-
-string tabulate(array(string) headings, array(array(mixed)) data, string|void gutter, int|void summary) {
-	if (!gutter) gutter = " ";
-	array info = ({headings}) + (array(array(string)))data;
-	array(int) widths = map(Array.transpose(info)) {return max(@sizeof(__ARGS__[0][*]));};
-	//Hack: First column isn't size-counted or guttered. It's for colour codes and such.
-	string fmt = sprintf("%%%ds", widths[1..][*]) * gutter;
-	//If there's a summary row, insert a ruler before it. (You can actually have multiple summary rows if you like.)
-	if (summary) info = info[..<summary] + ({({headings[0]}) + "\u2500" * widths[1..][*]}) + info[<summary-1..];
-	return sprintf("%{%s" + fmt + "\e[0m\n%}", info);
-}
-
-void analyze_cot(mapping data, string name, string tag, function|mapping write) {
+void analyze_cot(mapping data, string name, string tag, mapping write) {
 	mapping country = data->countries[tag];
 	mapping(string:int) area_has_level3 = country->area_has_level3 = ([]);
 	array maxlvl = ({ }), upgradeable = ({ }), developable = ({ });
@@ -52,28 +39,18 @@ void analyze_cot(mapping data, string name, string tag, function|mapping write) 
 			else if (++level3 > maxlevel3) noupgrade = "need merchants";
 		}
 		if (!noupgrade) maxprio = max(prio, maxprio);
-		if (mappingp(write)) return ([
+		return ([
 			"id": id, "dev": dev, "name": provname, "tradenode": tradenode,
 			"noupgrade": noupgrade || "",
 			"level": (int)cotlevel, "interesting": !noupgrade && prio,
 		]);
-		string desc = sprintf("%s\tLvl %s\tDev %d\t%s", id, cotlevel, dev, string_to_utf8(provname));
-		if (noupgrade) return sprintf("%s [%s]", desc, noupgrade);
-		else return color + desc;
 	}
-	if (mappingp(write)) {
-		write->cot = ([
-			"level3": level3, "max": maxlevel3,
-			"upgradeable": colorize("", upgradeable[*], PRIO_IMMEDIATE),
-			"developable": colorize("", developable[*], PRIO_SITUATIONAL),
-		]);
-		write->cot->maxinteresting = maxprio;
-		return;
-	}
-	if (sizeof(maxlvl)) write("Max level CoTs (%d/%d):\n%{%s\n%}\n", level3, maxlevel3, maxlvl[*][-1]);
-	else write("Max level CoTs: 0/%d\n", maxlevel3);
-	if (sizeof(upgradeable)) write("Upgradeable CoTs:\n%{%s\e[0m\n%}\n", colorize("\e[1;32m", upgradeable[*], PRIO_IMMEDIATE));
-	if (sizeof(developable)) write("Developable CoTs:\n%{%s\e[0m\n%}\n", colorize("\e[1;36m", developable[*], PRIO_SITUATIONAL));
+	write->cot = ([
+		"level3": level3, "max": maxlevel3,
+		"upgradeable": colorize("", upgradeable[*], 2),
+		"developable": colorize("", developable[*], 1),
+	]);
+	write->cot->maxinteresting = maxprio;
 }
 
 object calendar(string date) {
@@ -467,7 +444,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 	return ({ret[*][0] * " + ", max(@ret[*][1])});
 }
 
-void analyze_leviathans(mapping data, string name, string tag, function|mapping write) {
+void analyze_leviathans(mapping data, string name, string tag, mapping write) {
 	if (!has_value(data->dlc_enabled, "Leviathan")) return;
 	mapping country = data->countries[tag];
 	array projects = ({ });
@@ -510,7 +487,6 @@ void analyze_leviathans(mapping data, string name, string tag, function|mapping 
 			})});
 			//werror("Project: %O\n", proj);
 		}
-		//if (con) write("Construction: %O\n", con);
 	}
 	sort(projects);
 	object today = calendar(data->date);
@@ -523,26 +499,16 @@ void analyze_leviathans(mapping data, string name, string tag, function|mapping 
 		//Sometimes the cooldown is still recorded, but is in the past. No idea why. We hide that completely.
 		int days; catch {if (date) days = today->distance(calendar(date)) / today;};
 		if (!days) {cooldowns += ({({"", "---", "--------", String.capitalize(tradefor), cur})}); continue;}
-		cooldowns += ({({"", days, date, String.capitalize(tradefor), cur})}); //TODO: Don't include the initial empty string here, add it for tabulate() only
+		cooldowns += ({({"", days, date, String.capitalize(tradefor), cur})}); //TODO: Remove the unnecessary empty string at the start
 	}
-	if (mappingp(write)) {
-		write->monuments = projects[*][2];
-		//Favors are all rendered on the front end.
-		mapping owed = ([]);
-		foreach (data->countries; string other; mapping c) {
-			int favors = threeplace(c->active_relations[tag]->?favors);
-			if (favors > 0) owed[other] = ({favors / 1000.0}) + estimate_per_month(data, c)[*] * 6;
-		}
-		write->favors = (["cooldowns": cooldowns, "owed": owed]);
-		return;
-	}
-	if (sizeof(projects)) write("%s\n", string_to_utf8(tabulate(({""}) + "ID Tier Province Project Upgrading" / " ", projects[*][1], "  ", 0)));
-	write("\nFavors:\n");
+	write->monuments = projects[*][2];
+	//Favors are all rendered on the front end.
+	mapping owed = ([]);
 	foreach (data->countries; string other; mapping c) {
 		int favors = threeplace(c->active_relations[tag]->?favors);
-		if (favors > 1000) write("%s owes you %d.%03d\n", c->name || L10N(other), favors / 1000, favors % 1000);
+		if (favors > 0) owed[other] = ({favors / 1000.0}) + estimate_per_month(data, c)[*] * 6;
 	}
-	write("%s\n", string_to_utf8(tabulate(({"", "Days", "Date", "Trade for", "Max gain"}), cooldowns, "  ", 0)));
+	write->favors = (["cooldowns": cooldowns, "owed": owed]);
 }
 
 int count_building_slots(mapping data, string id) {
@@ -558,7 +524,7 @@ int count_building_slots(mapping data, string id) {
 	return slots + dev / 10;
 }
 
-void analyze_furnace(mapping data, string name, string tag, function|mapping write) {
+void analyze_furnace(mapping data, string name, string tag, mapping write) {
 	mapping country = data->countries[tag];
 	array coalprov = ({ });
 	foreach (country->owned_provinces, string id) {
@@ -601,19 +567,10 @@ void analyze_furnace(mapping data, string name, string tag, function|mapping wri
 			"buildings": buildings, "slots": slots,
 		])});
 	}
-	if (mappingp(write)) {write->coal_provinces = coalprov; return;}
-	if (!sizeof(coalprov)) return;
-	write("Coal-producing provinces:\n");
-	foreach (coalprov, mapping p)
-		if (p->status == "") {
-			write("\e[1;%dm%s\t%d/%d bldg\t%d dev\t%s\n", p->buildings < p->slots ? 32 : 36,
-				p->id, p->buildings, p->slots, p->dev, string_to_utf8(p->name));
-		}
-		else write("%s\t%s\t%d dev\t%s\n", p->id, p->status, p->dev, string_to_utf8(p->name));
-	write("\n");
+	write->coal_provinces = coalprov;
 }
 
-void analyze_upgrades(mapping data, string name, string tag, function|mapping write) {
+void analyze_upgrades(mapping data, string name, string tag, mapping write) {
 	mapping country = data->countries[tag];
 	mapping upgradeables = ([]);
 	foreach (country->owned_provinces, string id) {
@@ -637,11 +594,7 @@ void analyze_upgrades(mapping data, string name, string tag, function|mapping wr
 				upgradeables[L10N("building_" + target)] += ({(["id": id, "name": prov->name])}); //Do we need any more info?
 		}
 	}
-	if (mappingp(write)) sort(indices(upgradeables), write->upgradeables = (array)upgradeables); //Sort alphabetically by target building
-	else foreach (sort(indices(upgradeables)), string b) {
-		write("Can upgrade %d buildings to %s\n", sizeof(upgradeables[b]), b);
-		write("==> %s\n", string_to_utf8(upgradeables[b]->name * ", "));
-	}
+	sort(indices(upgradeables), write->upgradeables = (array)upgradeables); //Sort alphabetically by target building
 }
 
 array(int) calc_province_devel_cost(mapping data, int id, int|void improvements) {
@@ -676,8 +629,8 @@ array(int) calc_province_devel_cost(mapping data, int id, int|void improvements)
 	return ({base_cost, cost_factor, devcost, final_cost});
 }
 
-void analyze_findbuildings(mapping data, string name, string tag, function|mapping write, string highlight) {
-	if (mappingp(write)) write->highlight = (["id": highlight, "name": L10N("building_" + highlight), "provinces": ({ })]);
+void analyze_findbuildings(mapping data, string name, string tag, mapping write, string highlight) {
+	write->highlight = (["id": highlight, "name": L10N("building_" + highlight), "provinces": ({ })]);
 	mapping country = data->countries[tag];
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
@@ -709,14 +662,13 @@ void analyze_findbuildings(mapping data, string name, string tag, function|mappi
 		if (gotone) continue;
 		int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
 		int need_dev = (dev - dev % 10) + 10 * (buildings - slots + 1);
-		if (mappingp(write)) write->highlight->provinces += ({([
+		write->highlight->provinces += ({([
 			"id": (int)id, "buildings": buildings, "maxbuildings": slots,
 			"name": prov->name, "dev": dev, "need_dev": need_dev,
 			"cost": calc_province_devel_cost(data, (int)id, need_dev - dev),
 		])});
-		else write("\e[1;32m%s\t%d/%d bldg\tDev %d\t%s\e[0m\n", id, buildings, slots, dev, string_to_utf8(prov->name));
 	}
-	if (mappingp(write)) sort(write->highlight->provinces->cost[*][-1], write->highlight->provinces);
+	sort(write->highlight->provinces->cost[*][-1], write->highlight->provinces);
 }
 
 int(0..1) passes_filter(mapping country, mapping|array filter, int|void any) {
@@ -1024,9 +976,7 @@ long as you have at least 10.
 */
 
 void analyze_obscurities(mapping data, string name, string tag, mapping write, mapping prefs) {
-	//Gather some more obscure or less-interesting data for the web interface only.
-	//It's not worth consuming visual space for these normally, but the client might
-	//want to open this up and have a look.
+	//TODO: Break this gigantic function up, maybe put some things in with existing functions.
 
 	//Go through your navies and see if any have outdated ships.
 	mapping country = data->countries[tag], units = country->sub_unit;
@@ -1632,20 +1582,16 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	sort(sortkeys, write->golden_eras);
 }
 
-void analyze(mapping data, string name, string tag, function|mapping|void write, mapping|void prefs) {
-	if (!write) write = Stdio.stdin->write;
-	if (mappingp(write)) {
-		write->name = name + " (" + (data->countries[tag]->name || L10N(tag)) + ")";
-		write->fleetpower = prefs->fleetpower || 1000;
-	}
-	else write("\e[1m== Player: %s (%s) ==\e[0m\n", name, tag);
+void analyze(mapping data, string name, string tag, mapping write, mapping|void prefs) {
+	write->name = name + " (" + (data->countries[tag]->name || L10N(tag)) + ")";
+	write->fleetpower = prefs->fleetpower || 1000;
 	({analyze_cot, analyze_leviathans, analyze_furnace, analyze_upgrades})(data, name, tag, write);
-	if (mappingp(write)) analyze_obscurities(data, name, tag, write, prefs || ([]));
+	analyze_obscurities(data, name, tag, write, prefs || ([]));
 	if (string highlight = prefs->highlight_interesting) analyze_findbuildings(data, name, tag, write, highlight);
 }
 
 //Not currently triggered from anywhere. Doesn't currently have a primary use-case.
-void show_tradegoods(mapping data, string tag, function|void write) {
+void show_tradegoods(mapping data, string tag) {
 	//write("Sevilla: %O\n", data->provinces["-224"]);
 	//write("Demnate: %O\n", data->provinces["-4568"]);
 	mapping prod = ([]), count = ([]);
@@ -1674,7 +1620,7 @@ void show_tradegoods(mapping data, string tag, function|void write) {
 	write("Total %.2f/year or %.4f/month\n", total_value, total_value / 12);
 }
 
-void analyze_flagships(mapping data, function|mapping write) {
+void analyze_flagships(mapping data, mapping write) {
 	array flagships = ({ });
 	foreach (data->countries; string tag; mapping country) {
 		//mapping country = data->countries[tag];
@@ -1684,38 +1630,21 @@ void analyze_flagships(mapping data, function|mapping write) {
 				if (!ship->flagship) continue;
 				string was = ship->flagship->is_captured && ship->flagship->original_owner;
 				string cap = was ? " CAPTURED from " + (data->countries[was]->name || L10N(was)) : "";
-				if (mappingp(write)) flagships += ({({
+				flagships += ({({
 					tag, fleet->name,
 					L10N(ship->type), ship->name,
 					L10N(ship->flagship->modification[*]),
 					ship->flagship->is_captured ? (data->countries[was]->name || L10N(was)) : ""
 				})});
-				else flagships += ({({
-					string_to_utf8(sprintf("\e[1m%s\e[0m - %s: \e[36m%s %q\e[31m%s\e[0m",
-						country->name || L10N(tag), fleet->name,
-						L10N(ship->type), ship->name, cap)),
-					//Measure size without colour codes or UTF-8 encoding
-					sizeof(sprintf("%s - %s: %s %q%s",
-						country->name || L10N(tag), fleet->name,
-						L10N(ship->type), ship->name, cap)),
-					L10N(ship->flagship->modification[*]) * ", ",
-				})});
-				//write("%O\n", ship->flagship);
 			}
 		}
 	}
 	sort(flagships);
-	if (mappingp(write)) {write->flagships = flagships; return;}
-	if (!sizeof(flagships)) return;
-	write("\n\e[1m== Flagships of the World ==\e[0m\n");
-	int width = max(@flagships[*][1]);
-	foreach (flagships, array f) f[1] = " " * (width - f[1]);
-	write("%{%s %s %s\n%}", flagships);
+	write->flagships = flagships;
 }
 
-void analyze_wars(mapping data, multiset(string) tags, function|mapping|void write) {
-	if (!write) write = Stdio.stdin->write;
-	if (mappingp(write)) write->wars = (["current": ({ }), "rumoured": G->war_rumours]);
+void analyze_wars(mapping data, multiset(string) tags, mapping write) {
+	write->wars = (["current": ({ }), "rumoured": G->war_rumours]);
 	foreach (values(data->active_war || ({ })), mapping war) {
 		if (!mappingp(war)) continue; //Dunno what's with these, there seem to be some strings in there.
 		//To keep displaying the war after all players separate-peace out, use
@@ -1732,8 +1661,7 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 		summary->cb = war->superiority || war->take_province || war->blockade_ports || (["casus_belli": "(none)"]);
 		//TODO: See if there are any other war goals
 		//NOTE: In a no-CB war, there is no war goal, so there'll be no attribute to locate.
-		if (mappingp(write)) write->wars->current += ({summary});
-		else write("\n\e[1;31m== War: %s - %s ==\e[0m\n", war->action, string_to_utf8(war->name));
+		write->wars->current += ({summary});
 		//war->action is the date it started?? Maybe the last date when a call to arms is valid?
 		//war->called - it's all just numbers, no country tags. No idea.
 
@@ -1761,7 +1689,7 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 				d && 30,
 				a ? atk : def, //Sword or shield
 			);
-			if (mappingp(write)) side = (({a && "attacker", d && "defender", tags[p->tag] && "player"}) - ({0})) * ",";
+			side = (({a && "attacker", d && "defender", tags[p->tag] && "player"}) - ({0})) * ",";
 			//I don't know how to recognize that eastern_militia is infantry and muscovite_cossack is cavalry.
 			//For land units, we can probably assume that you use only your current set. For sea units, there
 			//aren't too many (and they're shared by all nations), so I just hard-code them.
@@ -1785,8 +1713,7 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 			armies += ({({
 				-total_army * 1000000000 - mp,
 				({
-					side,
-					mappingp(write) ? p->tag : country->name || L10N(p->tag),
+					side, p->tag,
 					mil->infantry, mil->cavalry, mil->artillery,
 					mil->merc_infantry, mil->merc_cavalry, mil->merc_artillery,
 					total_army, mp,
@@ -1800,16 +1727,14 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 			navies += ({({
 				-total_navy * 1000000000 - sailors,
 				({
-					side,
-					mappingp(write) ? p->tag : country->name || L10N(p->tag),
+					side, p->tag,
 					mil->heavy_ship, mil->light_ship, mil->galley, mil->transport, total_navy, sailors,
 					sprintf("%3.0f%%", (float)country->navy_tradition),
 				}),
 			})});
 			navy_total[d] = navy_total[d][*] + navies[-1][1][2..<1][*];
 		}
-		string atot = "\e[48;2;50;0;0m" + atk + "  ", dtot = "\e[48;2;0;0;50m" + def + "  ";
-		if (mappingp(write)) {atot = "attacker,total"; dtot="defender,total";}
+		string atot = "attacker,total", dtot="defender,total";
 		armies += ({
 			//The totals get sorted after the individual country entries. Their sort keys are
 			//guaranteed positive, and are such that the larger army has a smaller sort key.
@@ -1822,8 +1747,6 @@ void analyze_wars(mapping data, multiset(string) tags, function|mapping|void wri
 			({1 + navy_total[0][-2] + navy_total[0][-1], ({dtot, ""}) + navy_total[1] + ({""})}),
 		});
 		sort(armies); sort(navies);
-		if (mappingp(write)) {summary->armies = armies[*][-1]; summary->navies = navies[*][-1]; continue;}
-		write("%s\n", string_to_utf8(tabulate(({"   "}) + "Country Infantry Cavalry Artillery Inf$$ Cav$$ Art$$ Total Manpower Prof Trad" / " ", armies[*][-1], "  ", 2)));
-		write("%s\n", string_to_utf8(tabulate(({"   "}) + "Country Heavy Light Galley Transp Total Sailors Trad" / " ", navies[*][-1], "  ", 2)));
+		summary->armies = armies[*][-1]; summary->navies = navies[*][-1];
 	}
 }
