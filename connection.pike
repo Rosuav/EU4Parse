@@ -1,6 +1,6 @@
 //HTTP handler including WebSockets
 mapping(string:array(object)) websocket_groups = ([]);
-multiset(object) connections = (<>);
+multiset(object) notifiers = (<>);
 
 mapping respond(Protocols.HTTP.Server.Request req) {
 	mapping mimetype = (["eu4_parse.js": "text/javascript", "eu4_parse.css": "text/css"]);
@@ -119,7 +119,7 @@ void websocket_cmd_fleetpower(mapping conn, mapping data) {
 }
 
 void websocket_cmd_goto(mapping conn, mapping data) {
-	indices(connections)->provnotify(data->tag, (int)data->province);
+	indices(notifiers)->provnotify(data->tag, (int)data->province);
 }
 
 void websocket_cmd_pin(mapping conn, mapping data) {
@@ -152,7 +152,7 @@ void websocket_cmd_cyclenext(mapping conn, mapping data) {
 	[int id, array rest] = Array.shift(G->G->provincecycle[country]);
 	G->G->provincecycle[country] = rest + ({id});
 	update_group(country);
-	indices(connections)->provnotify(data->tag, (int)id);
+	indices(notifiers)->provnotify(data->tag, (int)id);
 }
 
 void websocket_cmd_search(mapping conn, mapping data) {
@@ -434,7 +434,7 @@ class Connection(Stdio.File sock) {
 		sock->set_buffer_mode(incoming, outgoing);
 		sock->set_nonblocking(sockread, 0, sockclosed);
 	}
-	void sockclosed() {connections[this] = 0; sock->close();}
+	void sockclosed() {notifiers[this] = 0; sock->close();}
 
 	string find_country(mapping data, string country) {
 		foreach (data->players_countries / 2, [string name, string tag])
@@ -472,10 +472,10 @@ class Connection(Stdio.File sock) {
 			sscanf(cmd, "%s %s", cmd, arg);
 			switch (cmd) {
 				case "notify":
-					connections[this] = 0;
+					notifiers[this] = 0;
 					if (sscanf(arg, "province %s", arg)) ; //notiftype = "province";
 					else sock->write("Warning: Old 'notify' no longer supported, using 'notify province' instead\n");
-					notify = arg; connections[this] = 1;
+					notify = arg; notifiers[this] = 1;
 					break;
 				case "province": cycle_provinces(arg); break;
 				default: sock->write(sprintf("Unknown command %O\n", cmd)); break;
