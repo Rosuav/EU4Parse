@@ -63,14 +63,7 @@ int threeplace(string value) {
 	return (neg == "-" ? -1 : 1) * ((int)whole * 1000 + (int)sprintf("%.03s", frac + "000"));
 }
 
-int interest_priority = 0;
-array(string) interesting_province = ({ });
-enum {PRIO_UNSET, PRIO_SITUATIONAL, PRIO_IMMEDIATE, PRIO_EXPLICIT};
-void interesting(string id, int|void prio) {
-	if (prio < interest_priority) return; //We've already had higher priority markers
-	if (prio > interest_priority) {interest_priority = prio; interesting_province = ({ });} //Replace with new highest prio
-	if (!has_value(interesting_province, id)) interesting_province += ({id}); //Retain order but avoid duplicates
-}
+enum {PRIO_UNSET, PRIO_SITUATIONAL, PRIO_IMMEDIATE, PRIO_EXPLICIT}; //Deprecated, probably won't be needed with no telnet
 
 mapping province_info;
 mapping building_slots = ([]);
@@ -106,7 +99,7 @@ void analyze_cot(mapping data, string name, string tag, function|mapping write) 
 			if (area_has_level3[CFG->prov_area[id]]) noupgrade = "other l3 in area";
 			else if (++level3 > maxlevel3) noupgrade = "need merchants";
 		}
-		if (!noupgrade) {interesting(id, prio); maxprio = max(prio, maxprio);}
+		if (!noupgrade) maxprio = max(prio, maxprio);
 		if (mappingp(write)) return ([
 			"id": id, "dev": dev, "name": provname, "tradenode": tradenode,
 			"noupgrade": noupgrade || "",
@@ -661,7 +654,6 @@ void analyze_furnace(mapping data, string name, string tag, function|mapping wri
 	write("Coal-producing provinces:\n");
 	foreach (coalprov, mapping p)
 		if (p->status == "") {
-			interesting(p->id, PRIO_IMMEDIATE); //TODO: Should it always be highlighted at the same prio? Should it always even be highlighted?
 			write("\e[1;%dm%s\t%d/%d bldg\t%d dev\t%s\n", p->buildings < p->slots ? 32 : 36,
 				p->id, p->buildings, p->slots, p->dev, string_to_utf8(p->name));
 		}
@@ -689,10 +681,8 @@ void analyze_upgrades(mapping data, string name, string tag, function|mapping wr
 				target = bldg->obsoleted_by;
 				bldg = upgrade;
 			}
-			if (target && target != constructing) {
-				interesting(id, PRIO_SITUATIONAL);
+			if (target && target != constructing)
 				upgradeables[L10N("building_" + target)] += ({(["id": id, "name": prov->name])}); //Do we need any more info?
-			}
 		}
 	}
 	if (mappingp(write)) sort(indices(upgradeables), write->upgradeables = (array)upgradeables); //Sort alphabetically by target building
@@ -733,7 +723,6 @@ void analyze_findbuildings(mapping data, string name, string tag, function|mappi
 			if (gotone) break;
 		}
 		if (gotone) continue;
-		interesting(id, PRIO_EXPLICIT);
 		int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
 		int need_dev = (dev - dev % 10) + 10 * (buildings - slots + 1);
 		if (mappingp(write)) write->highlight->provinces += ({([
@@ -1644,10 +1633,8 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	sort(sortkeys, write->golden_eras);
 }
 
-mapping(string:array) interesting_provinces = ([]);
 void analyze(mapping data, string name, string tag, function|mapping|void write, mapping|void prefs) {
 	if (!write) write = Stdio.stdin->write;
-	interesting_province = ({ }); interest_priority = 0;
 	if (mappingp(write)) {
 		write->name = name + " (" + (data->countries[tag]->name || L10N(tag)) + ")";
 		write->fleetpower = prefs->fleetpower || 1000;
@@ -1656,8 +1643,6 @@ void analyze(mapping data, string name, string tag, function|mapping|void write,
 	({analyze_cot, analyze_leviathans, analyze_furnace, analyze_upgrades})(data, name, tag, write);
 	if (mappingp(write)) analyze_obscurities(data, name, tag, write, prefs || ([]));
 	if (string highlight = prefs->highlight_interesting) analyze_findbuildings(data, name, tag, write, highlight);
-	//write("* %s * %s\n\n", tag, Standards.JSON.encode((array(int))interesting_province)); //If needed in a machine-readable format
-	interesting_provinces[tag] = interesting_province;
 }
 
 array(int) calc_province_devel_cost(mapping data, int id, int|void improvements) {
