@@ -125,7 +125,7 @@ void websocket_cmd_goto(mapping conn, mapping data) {
 void websocket_cmd_pin(mapping conn, mapping data) {
 	mapping pins = persist_path(conn->group, "pinned_provinces");
 	if (pins[data->province]) m_delete(pins, data->province);
-	else /*if (G->last_parsed_savefile->provinces["-" + data->province])*/ pins[data->province] = max(@values(pins)) + 1;
+	else /*if (G->G->last_parsed_savefile->provinces["-" + data->province])*/ pins[data->province] = max(@values(pins)) + 1;
 	persist_save(); update_group(conn->group);
 }
 
@@ -269,7 +269,7 @@ void websocket_cmd_savecustom(mapping conn, mapping data) {
 }
 
 mapping get_state(string group) {
-	mapping data = G->last_parsed_savefile;
+	mapping data = G->G->last_parsed_savefile;
 	if (!data) return (["error": "Processing savefile... "]);
 	if (G->G->mods_inconsistent) return (["error": "MODS INCONSISTENT, restart parser to fix"]); //TODO: Never do this, just fix automatically
 	//For the landing page, offer a menu of player countries
@@ -445,14 +445,14 @@ class Connection(Stdio.File sock) {
 	void provnotify(string country, int province) {
 		//A request has come in (from the web) to notify a country to focus on a province.
 		if (!notify) return;
-		string tag = find_country(G->last_parsed_savefile, notify);
+		string tag = find_country(G->G->last_parsed_savefile, notify);
 		if (tag != country) return; //Not found, or not for us.
 		outgoing->sprintf("provfocus %d\n", province);
 		sock->write(""); //Force a write callback (shouldn't be necessary??)
 	}
 
 	void cycle_provinces(string country) {
-		if (!G->last_parsed_savefile) return;
+		if (!G->G->last_parsed_savefile) return;
 		if (!G->G->provincecycle[country]) {
 			sock->write("Need to select a cycle group before cycling provinces\n");
 			return;

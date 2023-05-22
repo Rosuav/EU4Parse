@@ -37,28 +37,6 @@ void bootstrap(string module) {
 	G[module] = compiled;
 }
 
-mapping last_parsed_savefile;
-
-Stdio.File parser_pipe = Stdio.File();
-int parsing = -1;
-void process_savefile(string fn) {parsing = 0; G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
-void done_processing_savefile(object pipe, string msg) {
-	msg += parser_pipe->read() || ""; //Purge any spare text
-	foreach ((array)msg, int chr) {
-		if (chr <= 100) {parsing = chr; G->connection->send_to_all((["cmd": "update", "parsing": parsing]));}
-		if (chr == '~') {
-			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
-			if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
-			write("\nCurrent date: %s\n", data->date);
-			string mods = (data->mods_enabled_names||({}))->filename * ",";
-			G->G->mods_inconsistent = mods != CFG->active_mods;
-			G->G->provincecycle = ([]);
-			last_parsed_savefile = data;
-			parsing = -1; G->connection->send_updates_all();
-		}
-	}
-}
-
 int main(int argc, array(string) argv) {
 	add_constant("G", this);
 	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
@@ -99,12 +77,6 @@ int main(int argc, array(string) argv) {
 	//handling of dependencies.
 	array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
 	CFG = G->parser->GameConfig(active_mods);
-
-	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
-	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
-	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
-	array(string) files = G->globals->SAVE_PATH + "/" + get_dir(G->globals->SAVE_PATH)[*];
-	sort(file_stat(files[*])->mtime, files);
-	if (sizeof(files)) process_savefile(files[-1]);
+	G->parser->spawn();
 	return -1;
 }

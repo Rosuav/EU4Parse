@@ -269,7 +269,7 @@ class GameConfig {
 		if (!mappingp(province_info)) {
 			//Build up a script file to get the info we need.
 			//We assume that every province that could be of interest to us will be in an area.
-			Stdio.File script = Stdio.File(G->globals->LOCAL_PATH + "/prov.txt", "wct");
+			Stdio.File script = Stdio.File(LOCAL_PATH + "/prov.txt", "wct");
 			script->write("log = \"PROV-TERRAIN-BEGIN\"\n");
 			foreach (sort(indices(prov_area)), string provid) {
 				script->write(
@@ -319,7 +319,7 @@ log = \"PROV-TERRAIN-END\"
 			script->close();
 			//See if the script's already been run (yes, we rebuild the script every time - means you
 			//can rerun it in case there've been changes), and if so, parse and save the data.
-			string log = Stdio.read_file(G->globals->LOCAL_PATH + "/logs/game.log") || "";
+			string log = Stdio.read_file(LOCAL_PATH + "/logs/game.log") || "";
 			if (!has_value(log, "PROV-TERRAIN-BEGIN") || !has_value(log, "PROV-TERRAIN-END"))
 				exit(0, "Please open up EU4 and, in the console, type: run prov.txt\n");
 			string terrain = ((log / "PROV-TERRAIN-BEGIN")[-1] / "PROV-TERRAIN-END")[0];
@@ -728,4 +728,34 @@ int main() {
 	pipe->set_buffer_mode(incoming, outgoing);
 	pipe->set_nonblocking(piperead, 0, pipe->close);
 	return -1;
+}
+
+//Spawn and communicate with the parser subprocess
+Stdio.File parser_pipe = Stdio.File();
+int parsing = -1;
+void process_savefile(string fn) {parsing = 0; G->G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
+void parser_pipe_msg(object pipe, string msg) {
+	msg += parser_pipe->read() || ""; //Purge any spare text
+	foreach ((array)msg, int chr) {
+		if (chr <= 100) {parsing = chr; G->G->connection->send_to_all((["cmd": "update", "parsing": parsing]));}
+		if (chr == '~') {
+			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
+			if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
+			write("\nCurrent date: %s\n", data->date);
+			string mods = (data->mods_enabled_names||({}))->filename * ",";
+			G->G->mods_inconsistent = mods != G->CFG->active_mods;
+			G->G->provincecycle = ([]);
+			G->G->last_parsed_savefile = data;
+			parsing = -1; G->G->connection->send_updates_all();
+		}
+	}
+}
+
+void spawn() {
+	object proc = Process.spawn_pike(({"eu4_parse.pike", "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
+	parser_pipe->set_nonblocking(parser_pipe_msg, 0, parser_pipe->close);
+	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
+	array(string) files = SAVE_PATH + "/" + get_dir(SAVE_PATH)[*];
+	sort(file_stat(files[*])->mtime, files);
+	if (sizeof(files)) process_savefile(files[-1]);
 }
