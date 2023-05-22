@@ -162,11 +162,11 @@ Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
 }
 
 array(string) find_mod_directories(array(string) mod_filenames) {
-	array config_dirs = ({G->PROGRAM_PATH});
+	array config_dirs = ({PROGRAM_PATH});
 	foreach (mod_filenames, string fn) {
-		mapping info = parse_eu4txt(Stdio.read_file(G->LOCAL_PATH + "/" + fn));
+		mapping info = parse_eu4txt(Stdio.read_file(LOCAL_PATH + "/" + fn));
 		string path = info->path; if (!path) continue;
-		if (!has_prefix(path, "/")) path = G->LOCAL_PATH + "/" + path;
+		if (!has_prefix(path, "/")) path = LOCAL_PATH + "/" + path;
 		config_dirs += ({path});
 	}
 	return config_dirs;
@@ -226,7 +226,7 @@ class GameConfig {
 	}
 	mapping parse_config_dir(string dir, string|void key) {return `|(@gather_config_dir(dir, key));}
 	mapping low_parse_savefile(string fn) { //TODO: Replace all uses with either parse_eu4txt itself or parse_config_dir
-		return parse_eu4txt(Stdio.read_file(G->PROGRAM_PATH + fn));
+		return parse_eu4txt(Stdio.read_file(PROGRAM_PATH + fn));
 	}
 
 	mapping(string:string) L10n = ([]), province_localised_names;
@@ -247,8 +247,8 @@ class GameConfig {
 		//It seems that only one of them has the textcolors block that we need.
 		array|mapping tc = gfx->bitmapfonts->textcolors;
 		if (arrayp(tc)) textcolors = (tc - ({0}))[0]; else textcolors = tc;
-		foreach (sort(glob("*.gfx", get_dir(G->PROGRAM_PATH + "/interface"))), string fn) {
-			string raw = Stdio.read_file(G->PROGRAM_PATH + "/interface/" + fn);
+		foreach (sort(glob("*.gfx", get_dir(PROGRAM_PATH + "/interface"))), string fn) {
+			string raw = Stdio.read_file(PROGRAM_PATH + "/interface/" + fn);
 			//HACK: One of the files has a weird loose semicolon in it! Comment character? Unnecessary separator?
 			raw = replace(raw, ";", "");
 			mapping data = parse_eu4txt(raw);
@@ -493,7 +493,7 @@ class GameConfig {
 
 		//TODO: What if a mod changes units? How does that affect this?
 		unit_definitions = ([]);
-		foreach (get_dir(G->PROGRAM_PATH + "/common/units"), string fn) {
+		foreach (get_dir(PROGRAM_PATH + "/common/units"), string fn) {
 			mapping data = low_parse_savefile("/common/units/" + fn);
 			unit_definitions[fn - ".txt"] = data;
 		}
@@ -521,8 +521,8 @@ class GameConfig {
 
 		//Parse out localised province names and map from province ID to all its different names
 		province_localised_names = ([]);
-		foreach (sort(get_dir(G->PROGRAM_PATH + "/common/province_names")), string fn) {
-			mapping names = parse_eu4txt(Stdio.read_file(G->PROGRAM_PATH + "/common/province_names/" + fn) + "\n");
+		foreach (sort(get_dir(PROGRAM_PATH + "/common/province_names")), string fn) {
+			mapping names = parse_eu4txt(Stdio.read_file(PROGRAM_PATH + "/common/province_names/" + fn) + "\n");
 			string lang = L10n[fn - ".txt"] || fn; //Assuming that "castilian.txt" is the culture Castilian, and "TUR.txt" is the nation Ottomans
 			foreach (names; string prov; array|string name) {
 				if (arrayp(name)) name = name[0]; //The name can be [name, capitalname] but we don't care about the capital name
@@ -541,7 +541,7 @@ void update_checksum(object hash, array(string) dirs, string dir, string tail, i
 
 string calculate_checksum(array(string) mod_filenames) {
 	array dirs = find_mod_directories(mod_filenames);
-	mapping manifest = parse_eu4txt(Stdio.read_file(G->PROGRAM_PATH + "/checksum_manifest.txt"));
+	mapping manifest = parse_eu4txt(Stdio.read_file(PROGRAM_PATH + "/checksum_manifest.txt"));
 	//The hash stored in the EU4 files is the right length for MD5. However, simply using MD5
 	//here doesn't give the same result. It might be that it's not MD5, it might be that I'm
 	//processing the files in the wrong order, it might be that the file names themselves are

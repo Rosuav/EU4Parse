@@ -34,10 +34,6 @@ If there are any issues remaining - notably, if anything crashes - report it on 
 that and the above are all done, the server can become purely a service, no console needed.
 */
 
-constant LOCAL_PATH = "../.local/share/Paradox Interactive/Europa Universalis IV";
-constant SAVE_PATH = LOCAL_PATH + "/save games";
-constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"; //Append /map or /common etc to access useful data files
-
 mapping G = ([]);
 object CFG;
 
@@ -147,7 +143,7 @@ int main(int argc, array(string) argv) {
 		string fn = argc > 2 ? argv[2] : "mp_autosave.eu4";
 		object start = System.Timer();
 		#define TIME(x) {float tm = gauge {x;}; write("%.3f\t%.3f\t%s\n", start->get(), tm, #x);}
-		string raw; TIME(raw = Stdio.read_file(SAVE_PATH + "/" + fn));
+		string raw; TIME(raw = Stdio.read_file(G->globals->SAVE_PATH + "/" + fn));
 		mapping data; TIME(data = G->parser->parse_savefile_string(raw));
 		write("Parse successful. Date: %s\n", data->date);
 		return 0;
@@ -155,7 +151,7 @@ int main(int argc, array(string) argv) {
 	if (argc > 1 && argv[1] == "--checksum") {
 		object tm = System.Timer();
 		write("Vanilla checksum: %O\n", G->parser->calculate_checksum(({ })));
-		array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
+		array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
 		write("Current checksum: %O\n", G->parser->calculate_checksum(active_mods));
 		werror("Time %O\n", tm->get());
 		return 0;
@@ -170,7 +166,7 @@ int main(int argc, array(string) argv) {
 	//future, but editing the mods themselves will still require a restart.
 	//Note: Order of mods is not guaranteed here. The game does them in alphabetical order, but with
 	//handling of dependencies.
-	array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
+	array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
 	CFG = G->parser->GameConfig(active_mods);
 
 	/* It is REALLY REALLY hard to replicate the game's full algorithm for figuring out which terrain each province
@@ -202,7 +198,7 @@ int main(int argc, array(string) argv) {
 	if (!mappingp(province_info)) {
 		//Build up a script file to get the info we need.
 		//We assume that every province that could be of interest to us will be in an area.
-		Stdio.File script = Stdio.File(LOCAL_PATH + "/prov.txt", "wct");
+		Stdio.File script = Stdio.File(G->globals->LOCAL_PATH + "/prov.txt", "wct");
 		script->write("log = \"PROV-TERRAIN-BEGIN\"\n");
 		foreach (sort(indices(CFG->prov_area)), string provid) {
 			script->write(
@@ -252,7 +248,7 @@ log = \"PROV-TERRAIN-END\"
 		script->close();
 		//See if the script's already been run (yes, we rebuild the script every time - means you
 		//can rerun it in case there've been changes), and if so, parse and save the data.
-		string log = Stdio.read_file(LOCAL_PATH + "/logs/game.log") || "";
+		string log = Stdio.read_file(G->globals->LOCAL_PATH + "/logs/game.log") || "";
 		if (!has_value(log, "PROV-TERRAIN-BEGIN") || !has_value(log, "PROV-TERRAIN-END"))
 			exit(0, "Please open up EU4 and, in the console, type: run prov.txt\n");
 		string terrain = ((log / "PROV-TERRAIN-BEGIN")[-1] / "PROV-TERRAIN-END")[0];
@@ -277,7 +273,7 @@ log = \"PROV-TERRAIN-END\"
 	object proc = Process.spawn_pike(({argv[0], "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(done_processing_savefile, 0, parser_pipe->close);
 	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
-	array(string) files = SAVE_PATH + "/" + get_dir(SAVE_PATH)[*];
+	array(string) files = G->globals->SAVE_PATH + "/" + get_dir(G->globals->SAVE_PATH)[*];
 	sort(file_stat(files[*])->mtime, files);
 	if (sizeof(files)) process_savefile(files[-1]);
 	Stdio.Port mainsock = Stdio.Port();

@@ -29,13 +29,13 @@ let ws_sync = null; import('https://sikorsky.rosuav.com/static/ws_sync.js').then
 			//If it is 34-53 (35-54 in the UI), it is a three-color flag from pattern2.tga,
 			//also ten per row, two rows, also 128x128. Replace blue with color3.
 			//(Some of this could be parsed out of custom_country_colors. Hardcoded for now.)
-			[Image.Image backgrounds, int bghash] = G->G->parser->load_image(G->PROGRAM_PATH + "/gfx/custom_flags/pattern" + "2" * (flag >= 34) + ".tga", 1);
+			[Image.Image backgrounds, int bghash] = G->G->parser->load_image(PROGRAM_PATH + "/gfx/custom_flags/pattern" + "2" * (flag >= 34) + ".tga", 1);
 			//NOTE: Symbols for custom nations are drawn from a pool of 120, of which client states
 			//are also selected, but restricted by religious group. (Actually there seem to be 121 on
 			//the spritesheet, but the last one isn't available to customs.)
 			//The symbol spritesheet is 4 rows of 32, each 64x64. It might be possible to find
 			//this info in the edit files somewhere, but for now I'm hard-coding it.
-			[mapping symbols, int symhash] = G->G->parser->load_image(G->PROGRAM_PATH + "/gfx/interface/client_state_symbols_large.dds", 1);
+			[mapping symbols, int symhash] = G->G->parser->load_image(PROGRAM_PATH + "/gfx/interface/client_state_symbols_large.dds", 1);
 			//Note that if the definitions of the colors change but the spritesheets don't,
 			//we'll generate the exact same etag. Seems unlikely, and not that big a deal anyway.
 			etag = sprintf("W/\"%x-%x-%d-%d-%d-%d-%d%s\"", bghash, symhash, symbol, flag, color1, color2, color3, color);
@@ -54,7 +54,7 @@ let ws_sync = null; import('https://sikorsky.rosuav.com/static/ws_sync.js').then
 		}
 		else {
 			//Standard flags are loaded as-is.
-			[img, int hash] = G->G->parser->load_image(G->PROGRAM_PATH + "/gfx/flags/" + tag + ".tga", 1);
+			[img, int hash] = G->G->parser->load_image(PROGRAM_PATH + "/gfx/flags/" + tag + ".tga", 1);
 			if (!img) return 0;
 			//For colonial nations, instead of using the country's own tag (eg C03), we get
 			//a flag definition based on the parent country and a colour.
@@ -168,7 +168,7 @@ void websocket_cmd_set_effect_mode(mapping conn, mapping data) {
 }
 
 void websocket_cmd_listcustoms(mapping conn, mapping data) {
-	string customdir = G->LOCAL_PATH + "/custom nations";
+	string customdir = LOCAL_PATH + "/custom nations";
 	mapping nations = ([]);
 	foreach (sort(get_dir(customdir)), string fn)
 		nations[fn] = G->low_parse_savefile(Stdio.read_file(customdir + "/" + fn));
@@ -233,7 +233,7 @@ string save_custom_nation(mapping data) {
 	//4) All attributes to be saved must be included.
 	//It's up to you to make sure the file actually is loadable. The easiest way is to
 	//make minor, specific changes to an existing custom nation.
-	string customdir = G->LOCAL_PATH + "/custom nations";
+	string customdir = LOCAL_PATH + "/custom nations";
 	string fn = data->filename; if (!fn) return "Need a file name";
 	if (!has_value(get_dir(customdir), fn)) return "File not found";
 	sscanf(Stdio.read_file(customdir + "/" + fn), "# Editable: %s\n", string pwd);

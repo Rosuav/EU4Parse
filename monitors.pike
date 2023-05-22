@@ -49,7 +49,7 @@ array|string text_with_icons(string text) {
 			foreach (img, string fn) allfn += ({fn, replace(fn, ".dds", ".tga"), replace(fn, ".tga", ".dds")});
 			img = Array.uniq(allfn);
 			foreach (img, string fn) {
-				object|mapping png = G->parser->load_image(G->PROGRAM_PATH + "/" + fn);
+				object|mapping png = G->parser->load_image(PROGRAM_PATH + "/" + fn);
 				if (mappingp(png)) png = png->image;
 				if (!png) continue;
 				img = "data:image/png;base64," + MIME.encode_base64(Image.PNG.encode(png), 1);
@@ -102,7 +102,7 @@ string render_text(array|string|mapping txt) {
 void watch_game_log(object inot) {
 	//Monitor the log, and every time there's a new line that matches "[messagehandler.cpp:351]: ... accepted peace ...",
 	//add it to a list of peace treaties. When the log is truncated or replaced, clear that list.
-	string logfn = G->LOCAL_PATH + "/logs/game.log";
+	string logfn = LOCAL_PATH + "/logs/game.log";
 	object log = Stdio.File(logfn);
 	log->set_nonblocking();
 	string data = "";
@@ -176,7 +176,7 @@ void watch_game_log(object inot) {
 		pos = log->tell();
 	};
 	//If we need to handle deletes/recreations or file movements, watch the directory too.
-	/*inot->add_watch(G->LOCAL_PATH + "/logs", System.Inotify.IN_CREATE | System.Inotify.IN_MOVED_TO) {
+	/*inot->add_watch(LOCAL_PATH + "/logs", System.Inotify.IN_CREATE | System.Inotify.IN_MOVED_TO) {
 		[int event, int cookie, string path] = __ARGS__;
 		write("Got a dir event! %O %O %O\n", event, cookie, path); //Moved is 128, create is 256
 	};*/
@@ -185,7 +185,7 @@ void watch_game_log(object inot) {
 protected void create() {
 	object inot = System.Inotify.Instance();
 	string new_file; int nomnomcookie;
-	inot->add_watch(G->SAVE_PATH, System.Inotify.IN_CLOSE_WRITE | System.Inotify.IN_MOVED_TO | System.Inotify.IN_MOVED_FROM) {
+	inot->add_watch(SAVE_PATH, System.Inotify.IN_CLOSE_WRITE | System.Inotify.IN_MOVED_TO | System.Inotify.IN_MOVED_FROM) {
 		[int event, int cookie, string path] = __ARGS__;
 		//EU4 seems to always save into a temporary file, then rename it over the target. This
 		//sometimes includes renaming the target out of the way first (eg old_autosave.eu4).

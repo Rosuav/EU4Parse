@@ -2,6 +2,10 @@ protected void create(string n) {
 	foreach (indices(this), string f) if (f != "create" && f[0] != '_') add_constant(f, this[f]);
 }
 
+constant LOCAL_PATH = "../.local/share/Paradox Interactive/Europa Universalis IV";
+constant SAVE_PATH = LOCAL_PATH + "/save games";
+constant PROGRAM_PATH = "../.steam/steam/steamapps/common/Europa Universalis IV"; //Append /map or /common etc to access useful data files
+
 string L10N(string key) {return G->CFG->L10n[key] || key;}
 
 int threeplace(string value) {
