@@ -1,14 +1,4 @@
-//Read a text (non-ironman) EU4 savefile and scan for matters of interest. Provides info to networked clients.
-/* TODO: Split this into several files.
-1. eu4_parse.pike - the main entrypoint, and MAYBE hot reload kernel??
-2. EU file format parsing
-   - Import it into the main analysis script, and also run it standalone for save files
-3. Analysis
-4. Web server (incl websockets)
-5. Persist
-Others?
-*/
-//TODO: Use @export to simplify things (lift from StilleBot)
+//Read a text (non-ironman) EU4 savefile and scan for matters of interest. Provides info via a web page.
 /*
 NOTE: Province group selection inverts the normal rules and has the web client in charge.
 This ensures that there can be no desynchronization between user view and province ID
