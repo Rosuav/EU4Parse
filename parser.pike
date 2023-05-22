@@ -738,6 +738,9 @@ int main() {
 //Spawn and communicate with the parser subprocess
 Stdio.File parser_pipe = Stdio.File();
 int parsing = -1;
+//TODO: After signalling the subprocess, recheck the mod JSON and the corresponding hash, and
+//if they've changed, generate a new G->CFG object. Would cost about half a second of chugging
+//per savefile load though.
 void process_savefile(string fn) {parsing = 0; G->G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
 void parser_pipe_msg(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
