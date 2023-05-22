@@ -149,6 +149,10 @@ int main(int argc, array(string) argv) {
 		return 0;
 	}
 	if (argc > 1 && argv[1] == "--checksum") {
+		catch {
+			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
+			write("Latest save file: %O\n", data->checksum);
+		}; //Ignore errors and just don't print the checksum
 		object tm = System.Timer();
 		write("Vanilla checksum: %O\n", G->parser->calculate_checksum(({ })));
 		array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
