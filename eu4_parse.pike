@@ -75,8 +75,7 @@ int main(int argc, array(string) argv) {
 	//future, but editing the mods themselves will still require a restart.
 	//Note: Order of mods is not guaranteed here. The game does them in alphabetical order, but with
 	//handling of dependencies.
-	array active_mods = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
-	CFG = G->parser->GameConfig(active_mods);
+	CFG = G->parser->GameConfig();
 	G->parser->spawn();
 	return -1;
 }

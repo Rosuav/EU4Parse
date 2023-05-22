@@ -342,7 +342,12 @@ log = \"PROV-TERRAIN-END\"
 		}
 	}
 
-	protected void create(array(string) mod_filenames) {
+	protected void create(array(string)|void mod_filenames) {
+		if (!mod_filenames) {
+			//By default, get the currently-active mods. Can be overridden; pass an empty
+			//array for vanilla, or any specific set of mod names needed.
+			mod_filenames = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
+		}
 		config_dirs = find_mod_directories(mod_filenames);
 		active_mods = mod_filenames * ",";
 		mapping gfx = low_parse_savefile("/interface/core.gfx");
