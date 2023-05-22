@@ -202,7 +202,7 @@ protected void create() {
 		switch (event) {
 			case System.Inotify.IN_CLOSE_WRITE: new_file = path; break;
 			case System.Inotify.IN_MOVED_FROM: if (path == new_file) {new_file = 0; nomnomcookie = cookie;} break;
-			case System.Inotify.IN_MOVED_TO: if (cookie == nomnomcookie) {nomnomcookie = 0; G->process_savefile(path);} break;
+			case System.Inotify.IN_MOVED_TO: if (cookie == nomnomcookie) {nomnomcookie = 0; G->G->parser->process_savefile(path);} break;
 		}
 	};
 	watch_game_log(inot);
