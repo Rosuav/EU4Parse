@@ -267,7 +267,7 @@ void websocket_cmd_savecustom(mapping conn, mapping data) {
 }
 
 mapping get_state(string group) {
-	[mapping data, array recent_peace_treaties] = get_savefile_info();
+	mapping data = G->last_parsed_savefile;
 	if (!data) return (["error": "Processing savefile... "]);
 	if (G->G->mods_inconsistent) return (["error": "MODS INCONSISTENT, restart parser to fix"]); //TODO: Never do this, just fix automatically
 	//For the landing page, offer a menu of player countries
@@ -283,7 +283,7 @@ mapping get_state(string group) {
 	}
 	mapping country = data->countries[tag];
 	if (!country) return (["error": "Country/player not found: " + group]);
-	mapping ret = (["tag": tag, "self": data->countries[tag], "highlight": ([]), "recent_peace_treaties": recent_peace_treaties]);
+	mapping ret = (["tag": tag, "self": data->countries[tag], "highlight": ([]), "recent_peace_treaties": G->recent_peace_treaties]);
 	ret->capital_province = data->provinces["-" + data->countries[tag]->capital];
 	G->G->analysis->analyze(data, group, tag, ret, persist_path(group));
 	multiset players = (multiset)((data->players_countries || ({ })) / 2)[*][1]; //Normally, show all wars involving players.
