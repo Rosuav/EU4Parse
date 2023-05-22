@@ -72,7 +72,7 @@ class Connection(Stdio.File sock) {
 		}
 		[string id, array rest] = Array.shift(G->G->provincecycle[country]);
 		G->G->provincecycle[country] = rest + ({id});
-		G->webserver->update_group(country);
+		G->connection->update_group(country);
 		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
 		//put a "shutdown write direction when done" marker into the Buffer.
 		sock->write("provfocus " + id + "\nexit\n");
@@ -101,11 +101,11 @@ void sock_connected(object mainsock) {while (object sock = mainsock->accept()) C
 
 Stdio.File parser_pipe = Stdio.File();
 int parsing = -1;
-void process_savefile(string fn) {parsing = 0; G->webserver->send_updates_all(); parser_pipe->write(fn + "\n");}
+void process_savefile(string fn) {parsing = 0; G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
 void done_processing_savefile(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
 	foreach ((array)msg, int chr) {
-		if (chr <= 100) {parsing = chr; G->webserver->send_to_all((["cmd": "update", "parsing": parsing]));}
+		if (chr <= 100) {parsing = chr; G->connection->send_to_all((["cmd": "update", "parsing": parsing]));}
 		if (chr == '~') {
 			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
 			if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
@@ -114,7 +114,7 @@ void done_processing_savefile(object pipe, string msg) {
 			G->G->mods_inconsistent = mods != CFG->active_mods;
 			G->G->provincecycle = ([]);
 			last_parsed_savefile = data;
-			parsing = -1; G->webserver->send_updates_all();
+			parsing = -1; G->connection->send_updates_all();
 		}
 	}
 }
@@ -147,7 +147,7 @@ int main(int argc, array(string) argv) {
 		werror("Time %O\n", tm->get());
 		return 0;
 	}
-	bootstrap("webserver"); //Only needed for the main entrypoint
+	bootstrap("connection"); //Only needed for the main entrypoint
 	bootstrap("analysis");
 	bootstrap("monitors");
 

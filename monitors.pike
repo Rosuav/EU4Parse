@@ -159,7 +159,7 @@ void watch_game_log(object inot) {
 				//TODO: Record bankruptcies and when they'll expire (five years later)
 				werror("\e[1;33mBANKRUPT:\e[0m %s (%d %s %d)\n", country, day, mon, year);
 			}
-			if (sizeof(sendme) > 1) G->webserver->send_to_all(sendme);
+			if (sizeof(sendme) > 1) G->connection->send_to_all(sendme);
 		}
 	}
 	parse();
