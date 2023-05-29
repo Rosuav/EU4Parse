@@ -1352,7 +1352,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				if (has_value(completed, id)) continue; //Already done this mission, don't highlight it.
 				string title = G->CFG->L10n[id + "_title"];
 				if (!title) continue; //TODO: What happens if there's a L10n failure?
-				//if (!mappingp(info)) {werror("WARNING: Not mapping - %O\n", id); continue;} //FIXME: Parse error on Ottoman_Missions, conquer_serbia, fails this assertion (see icon)
+				if (!mappingp(info)) {werror("WARNING: Not mapping - %O\n", id); continue;}
 				int prereq = 1;
 				if (arrayp(info->required_missions)) foreach (info->required_missions, string req)
 					if (!has_value(completed, req)) prereq = 0;
