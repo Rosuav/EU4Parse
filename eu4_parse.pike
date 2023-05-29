@@ -18,6 +18,13 @@ Seems to be utterly broken maybe?? Never really got it going. Would be nice to h
 provinces you need to look at, in separate sections if there are multiple groups.
 */
 
+/* TODO: Reload signals.
+On the front end, have a couple of (or maybe just one combined) reload button.
+* Reload code - bootstrap all files again - make sure they retain as needed
+* Reload config - force a full reload of G->CFG, including a hash check and maybe
+  something that makes sure it checks the log for prov.txt output
+*/
+
 mapping G = ([]);
 object CFG;
 
