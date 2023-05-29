@@ -675,6 +675,19 @@ log = \"PROV-TERRAIN-END\"
 		hash = calculate_checksum(mod_filenames);
 		if (!sizeof(mod_filenames)) vanilla_hash = hash;
 		else vanilla_hash = calculate_checksum(({ }));
+
+		mapping saveme = ([]);
+		foreach (indices(this), string key) {
+			mixed val = this[key];
+			if (!functionp(val)) saveme[key] = val;
+			//Or should it be if string/array/mapping instead?
+		}
+		string json = Standards.JSON.encode(saveme);
+		//TODO: Save this to a file somewhere. On load, check for the presence of
+		//a cache blob for this hash, and if found, use that. However, even if it
+		//is not found, the province info should still be looked for separately;
+		//hence it's simpler to not cache province info in the same cache file.
+
 		G->G->error = gather_province_info();
 		if (G->G->error) active_mods = 0; //Flag ourselves as not safe to analyze with
 	}
