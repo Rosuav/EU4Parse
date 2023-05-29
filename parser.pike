@@ -399,8 +399,11 @@ log = \"PROV-TERRAIN-END\"
 			foreach (glob("*_l_english.yml", get_dir(dir + "/localisation") || ({ })), string fn)
 				parse_localisation(Stdio.read_file(dir + "/localisation/" + fn));
 		map_areas = low_parse_savefile("/map/area.txt");
-		foreach (map_areas; string areaname; array|maparray provinces)
+		foreach (map_areas; string areaname; array|maparray provinces) {
 			foreach (provinces;; string id) prov_area[id] = areaname;
+			//Discard any maparray mapping portions - they usually just specify the colour
+			if (objectp(provinces)) map_areas[areaname] = provinces->indexed;
+		}
 		mapping colo_regions = parse_config_dir("/common/colonial_regions");
 		foreach (colo_regions; string regionname; mapping info)
 			foreach (info->provinces || ({ }), string prov) prov_colonial_region[prov] = regionname;
