@@ -13,6 +13,11 @@ one file, since it makes mod handling easier. Will need to handle a replace_path
 definition, possibly also a dependencies block. See: https://eu4.paradoxwikis.com/Mod_structure
 */
 
+/* TODO: Missions and decisions parsing.
+Seems to be utterly broken maybe?? Never really got it going. Would be nice to have it list the
+provinces you need to look at, in separate sections if there are multiple groups.
+*/
+
 mapping G = ([]);
 object CFG;
 
