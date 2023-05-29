@@ -491,7 +491,7 @@ log = \"PROV-TERRAIN-END\"
 		array custom_nation_ideas = gather_config_dir("/common/custom_ideas");
 		retain_map_indices = 0;
 		foreach (trade_goods; string id; mapping info) {
-			trade_goods[info->_index + 1] = info;
+			trade_goods[(string)(info->_index + 1)] = info;
 			info->id = id;
 		}
 

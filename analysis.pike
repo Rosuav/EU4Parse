@@ -196,7 +196,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	}
 	_incorporate_all(data, modifiers, "Policy", G->CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
 	_incorporate_all(data, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
-	array tradebonus = G->CFG->trade_goods[((array(int))Array.arrayify(country->traded_bonus))[*]];
+	array tradebonus = G->CFG->trade_goods[Array.arrayify(country->traded_bonus))[*]];
 	_incorporate(data, modifiers, ("Trading in " + tradebonus->id[*])[*], tradebonus[*]); //TODO: TEST ME
 	_incorporate_all(data, modifiers, "Modifier", G->CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
 	mapping age = G->CFG->age_definitions[data->current_age]->abilities;
