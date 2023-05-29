@@ -100,7 +100,7 @@ mapping persist_path(string ... parts)
 	}
 	return ret;
 }
-void persist_save() {Stdio.write_file(".eu4_preferences.json", Standards.JSON.encode(([
+void persist_save() {Stdio.write_file("preferences.json", Standards.JSON.encode(([
 	"tag_preferences": tag_preferences,
 	"effect_display_mode": effect_display_mode,
 ]), 7));}
@@ -487,7 +487,7 @@ void sock_connected(object mainsock) {while (object sock = mainsock->accept()) C
 
 protected void create(string name) {
 	mapping cfg = ([]);
-	catch {cfg = Standards.JSON.decode(Stdio.read_file(".eu4_preferences.json"));};
+	catch {cfg = Standards.JSON.decode(Stdio.read_file("preferences.json"));};
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");
