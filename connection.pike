@@ -422,7 +422,7 @@ void send_to_all(mapping sendme) {
 
 void update_group(string tag) {
 	array socks = websocket_groups[tag];
-	if (socks && sizeof(socks)) send_update(websocket_groups[tag], get_state(tag) | (["parsing": G->parsing]));
+	if (socks && sizeof(socks)) send_update(websocket_groups[tag], get_state(tag) | (["parsing": G->G->parser->parsing]));
 }
 void send_updates_all() {foreach (websocket_groups; string tag;) update_group(tag);}
 
@@ -459,7 +459,7 @@ class Connection(Stdio.File sock) {
 		}
 		[string id, array rest] = Array.shift(G->G->provincecycle[country]);
 		G->G->provincecycle[country] = rest + ({id});
-		G->connection->update_group(country);
+		update_group(country);
 		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
 		//put a "shutdown write direction when done" marker into the Buffer.
 		sock->write("provfocus " + id + "\nexit\n");

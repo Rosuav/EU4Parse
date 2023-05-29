@@ -49,7 +49,7 @@ array|string text_with_icons(string text) {
 			foreach (img, string fn) allfn += ({fn, replace(fn, ".dds", ".tga"), replace(fn, ".tga", ".dds")});
 			img = Array.uniq(allfn);
 			foreach (img, string fn) {
-				object|mapping png = G->parser->load_image(PROGRAM_PATH + "/" + fn);
+				object|mapping png = G->G->parser->load_image(PROGRAM_PATH + "/" + fn);
 				if (mappingp(png)) png = png->image;
 				if (!png) continue;
 				img = "data:image/png;base64," + MIME.encode_base64(Image.PNG.encode(png), 1);
@@ -159,7 +159,7 @@ void watch_game_log(object inot) {
 				//TODO: Record bankruptcies and when they'll expire (five years later)
 				werror("\e[1;33mBANKRUPT:\e[0m %s (%d %s %d)\n", country, day, mon, year);
 			}
-			if (sizeof(sendme) > 1) G->connection->send_to_all(sendme);
+			if (sizeof(sendme) > 1) G->G->connection->send_to_all(sendme);
 		}
 	}
 	parse();

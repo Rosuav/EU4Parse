@@ -346,7 +346,7 @@ log = \"PROV-TERRAIN-END\"
 		if (!mod_filenames) {
 			//By default, get the currently-active mods. Can be overridden; pass an empty
 			//array for vanilla, or any specific set of mod names needed.
-			mod_filenames = Standards.JSON.decode_utf8(Stdio.read_file(G->globals->LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
+			mod_filenames = Standards.JSON.decode_utf8(Stdio.read_file(LOCAL_PATH + "/dlc_load.json"))->enabled_mods;
 		}
 		config_dirs = find_mod_directories(mod_filenames);
 		active_mods = mod_filenames * ",";
