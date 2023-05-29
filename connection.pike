@@ -271,7 +271,6 @@ void websocket_cmd_savecustom(mapping conn, mapping data) {
 mapping get_state(string group) {
 	mapping data = G->G->last_parsed_savefile;
 	if (!data) return (["error": "Processing savefile... "]);
-	if (G->G->mods_inconsistent) return (["error": "MODS INCONSISTENT, restart parser to fix"]); //TODO: Never do this, just fix automatically
 	//For the landing page, offer a menu of player countries
 	if (group == "?!?") return (["menu": data->players_countries / 2]);
 	string tag = group;

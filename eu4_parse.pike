@@ -42,6 +42,7 @@ int main(int argc, array(string) argv) {
 	G->G = G; //Allow code in this file to use G->G-> as it will need that when it moves out
 	bootstrap("globals");
 	bootstrap("parser");
+	CFG = G->parser->NullGameConfig();
 
 	if (argc > 1 && argv[1] == "--parse") return G->parser->main();
 	if (argc > 1 && argv[1] == "--timeparse") {
@@ -75,7 +76,6 @@ int main(int argc, array(string) argv) {
 	//future, but editing the mods themselves will still require a restart.
 	//Note: Order of mods is not guaranteed here. The game does them in alphabetical order, but with
 	//handling of dependencies.
-	CFG = G->parser->GameConfig();
 	G->parser->spawn();
 	return -1;
 }

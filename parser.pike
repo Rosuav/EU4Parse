@@ -641,6 +641,10 @@ log = \"PROV-TERRAIN-END\"
 		gather_province_info();
 	}
 }
+//Should be sufficient to prevent anything from crashing. Note that NullGameConfig()->active_mods
+//will always be null, and thus not equal to any string (if there are no active mods, a regular
+//GameConfig will have an empty string for active_mods).
+class NullGameConfig {inherit GameConfig; protected void create() { }}
 
 void update_checksum(object hash, array(string) dirs, string dir, string tail, int recurse) {
 	foreach (list_config_dir(dirs, "/" + dir), string fn) {
@@ -738,9 +742,6 @@ int main() {
 //Spawn and communicate with the parser subprocess
 Stdio.File parser_pipe = Stdio.File();
 int parsing = -1;
-//TODO: After signalling the subprocess, recheck the mod JSON and the corresponding hash, and
-//if they've changed, generate a new G->CFG object. Would cost about half a second of chugging
-//per savefile load though.
 void process_savefile(string fn) {parsing = 0; G->G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
 void parser_pipe_msg(object pipe, string msg) {
 	msg += parser_pipe->read() || ""; //Purge any spare text
@@ -750,8 +751,8 @@ void parser_pipe_msg(object pipe, string msg) {
 			mapping data = Standards.JSON.decode_utf8(Stdio.read_file("eu4_parse.json") || "{}")->data;
 			if (!data) {werror("Unable to parse save file (see above for errors, hopefully)\n"); return;}
 			write("\nCurrent date: %s\n", data->date);
-			string mods = (data->mods_enabled_names||({}))->filename * ",";
-			G->G->mods_inconsistent = mods != G->CFG->active_mods;
+			array mods = (data->mods_enabled_names||({}))->filename;
+			if (mods * "," != G->CFG->active_mods) G->CFG = GameConfig(mods);
 			G->G->provincecycle = ([]);
 			G->G->last_parsed_savefile = data;
 			parsing = -1; G->G->connection->send_updates_all();
