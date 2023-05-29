@@ -64,13 +64,6 @@ int main(int argc, array(string) argv) {
 	bootstrap("connection"); //Only needed for the main entrypoint
 	bootstrap("analysis");
 	bootstrap("monitors");
-
-	//Load up some info that is presumed to not change. If you're tweaking a game mod, this may break.
-	//In general, if you've made any change that could affect things, restart the parser to force it
-	//to reload. Currently, this also applies to changing which mods are active; that may change in the
-	//future, but editing the mods themselves will still require a restart.
-	//Note: Order of mods is not guaranteed here. The game does them in alphabetical order, but with
-	//handling of dependencies.
 	G->parser->spawn();
 	return -1;
 }
