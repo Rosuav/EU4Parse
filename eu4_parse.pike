@@ -7,21 +7,10 @@ synchronized. In practice, not a problem, since the client selects the group any
 */
 //TODO: Background service to do the key sending. See example systemd script in my cfgsystemd.
 
-/* TODO: Support mods better.
-Current: Preload on startup, cache the last-used-mod-list in eu4_parse.json, and if the save
-doesn't have the same set, warn. The localisation files will probably be wrong.
-Better fix: Isolate all the global state from the socket connections and, instead of dying, keep
-the sockets and reload all the definitions. Might also allow connections earlier, fwiw.
-
+/* TODO: Improve mod support.
 May end up switching all definition loading to parse_config_dir even if there's normally only the
 one file, since it makes mod handling easier. Will need to handle a replace_path block in the mod
 definition, possibly also a dependencies block. See: https://eu4.paradoxwikis.com/Mod_structure
-
-It may be of value to have multiple L10n caches, since mod switching is costly at the moment.
-It may also be of value to have a way to recognize a change to a mod, to force a reload.
-
-If there are any issues remaining - notably, if anything crashes - report it on the client. Once
-that and the above are all done, the server can become purely a service, no console needed.
 */
 
 mapping G = ([]);
