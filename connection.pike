@@ -270,6 +270,7 @@ void websocket_cmd_savecustom(mapping conn, mapping data) {
 
 mapping get_state(string group) {
 	mapping data = G->G->last_parsed_savefile;
+	if (G->G->error) return (["error": G->G->error]);
 	if (!data) return (["error": "Processing savefile... "]);
 	//For the landing page, offer a menu of player countries
 	if (group == "?!?") return (["menu": data->players_countries / 2]);

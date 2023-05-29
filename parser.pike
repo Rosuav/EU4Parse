@@ -183,6 +183,29 @@ array list_config_dir(array(string) config_dirs, string dir) {
 	return files[filenames[*]];
 }
 
+void update_checksum(object hash, array(string) dirs, string dir, string tail, int recurse) {
+	foreach (list_config_dir(dirs, "/" + dir), string fn) {
+		if (has_suffix(fn, tail)) hash->update(Stdio.read_file(fn));
+		if (recurse && Stdio.is_dir(fn)) update_checksum(hash, dirs, fn, tail, 1);
+	}
+}
+
+string calculate_checksum(array(string) mod_filenames) {
+	array dirs = find_mod_directories(mod_filenames);
+	mapping manifest = parse_eu4txt(Stdio.read_file(PROGRAM_PATH + "/checksum_manifest.txt"));
+	//The hash stored in the EU4 files is the right length for MD5. However, simply using MD5
+	//here doesn't give the same result. It might be that it's not MD5, it might be that I'm
+	//processing the files in the wrong order, it might be that the file names themselves are
+	//included in the hash, or it might be something else entirely. Fortunately I don't need
+	//to perfectly match the hash (it would be nice, but it's not vital); I can just update
+	//everything any time I see a change.
+	//object hash = Crypto.MD5();
+	object hash = Crypto.SHA1(); //Nearly as fast as MD5 and probably a better choice. SHA256 is safer but unnecessary, and a lot slower.
+	foreach (manifest->directory, mapping dir)
+		update_checksum(hash, dirs, dir->name, dir->file_extension, dir->sub_directories);
+	return sprintf("%@02x", (array)hash->digest());
+}
+
 //The current instance of this class is available as G->CFG
 class GameConfig {
 	//Everything in this class affects the EU4 checksum. Mods can change the underlying
@@ -194,6 +217,7 @@ class GameConfig {
 	//game does, as listed in checksum_manifest.txt? It wouldn't matter if the hash isn't
 	//the same as the game's one, as long as it changes whenever the game's hash changes.
 	string active_mods; //Comma-separated signature string of all active mods. Might need game version too?
+	string hash, vanilla_hash; //Not necessarily the same hash that the game uses, but derived from all the same files
 	array config_dirs;
 	mapping icons = ([]), textcolors;
 	mapping prov_area = ([]), map_areas = ([]), prov_colonial_region = ([]);
@@ -239,7 +263,7 @@ class GameConfig {
 		}
 	}
 
-	void gather_province_info() {
+	string gather_province_info() {
 		/* It is REALLY REALLY hard to replicate the game's full algorithm for figuring out which terrain each province
 		has. So, instead, let's ask for a little help - from the game, and from the human. And then save the results.
 		Unfortunately, it's not possible (as of v1.31) to do an every_province scope that reports the province ID in a
@@ -265,12 +289,15 @@ class GameConfig {
 		(the hash ignoring all mod directories) is found in cache but the main hash isn't, use that. Note that our hash
 		here is not identical to the one in the save file.
 		*/
-		province_info = Standards.JSON.decode(Stdio.read_file(".eu4_provinces.json") || "0");
+		mapping all_maps = Standards.JSON.decode(Stdio.read_file("maps.json") || "{}");
+		//If we have maps for this exact hash, use them; otherwise, try the maps for the files
+		//we'd have if all mods were disabled.
+		province_info = all_maps[hash] || all_maps[vanilla_hash];
 		if (!mappingp(province_info)) {
 			//Build up a script file to get the info we need.
 			//We assume that every province that could be of interest to us will be in an area.
 			Stdio.File script = Stdio.File(LOCAL_PATH + "/prov.txt", "wct");
-			script->write("log = \"PROV-TERRAIN-BEGIN\"\n");
+			script->write("log = \"PROV-TERRAIN-BEGIN: " + hash + "\"\n");
 			foreach (sort(indices(prov_area)), string provid) {
 				script->write(
 #"%s = {
@@ -321,9 +348,12 @@ log = \"PROV-TERRAIN-END\"
 			//can rerun it in case there've been changes), and if so, parse and save the data.
 			string log = Stdio.read_file(LOCAL_PATH + "/logs/game.log") || "";
 			if (!has_value(log, "PROV-TERRAIN-BEGIN") || !has_value(log, "PROV-TERRAIN-END"))
-				exit(0, "Please open up EU4 and, in the console, type: run prov.txt\n");
+				return "Please open up EU4 and, in the console, type: run prov.txt";
 			string terrain = ((log / "PROV-TERRAIN-BEGIN")[-1] / "PROV-TERRAIN-END")[0];
-			province_info = ([]);
+			sscanf(terrain, ": %s\n", string loghash); //The BEGIN line should have the hash in it
+			if (String.trim(loghash) != hash)
+				return "Hash inconsistent! Please open up EU4 and, in the console, type: run prov.txt";
+			province_info = all_maps[hash] = ([]);
 			foreach (terrain / "\n", string line) {
 				//Lines look like this:
 				//[effectimplementation.cpp:21960]: EVENT [1444.11.11]:PROV-TERRAIN: drylands 224 - Sevilla
@@ -332,7 +362,7 @@ log = \"PROV-TERRAIN-END\"
 				mapping pt = province_info[(string)provid] || ([]); province_info[(string)provid] = pt;
 				pt[key] = String.trim(val);
 			}
-			Stdio.write_file(".eu4_provinces.json", Standards.JSON.encode(province_info));
+			Stdio.write_file("maps.json", Standards.JSON.encode(all_maps));
 		}
 		foreach (province_info; string id; mapping provinfo) {
 			mapping terraininfo = terrain_definitions->categories[provinfo->terrain];
@@ -638,36 +668,17 @@ log = \"PROV-TERRAIN-END\"
 			}
 		}
 
-		gather_province_info();
+		hash = calculate_checksum(mod_filenames);
+		if (!sizeof(mod_filenames)) vanilla_hash = hash;
+		else vanilla_hash = calculate_checksum(({ }));
+		G->G->error = gather_province_info();
+		if (G->G->error) active_mods = 0; //Flag ourselves as not safe to analyze with
 	}
 }
 //Should be sufficient to prevent anything from crashing. Note that NullGameConfig()->active_mods
 //will always be null, and thus not equal to any string (if there are no active mods, a regular
 //GameConfig will have an empty string for active_mods).
 class NullGameConfig {inherit GameConfig; protected void create() { }}
-
-void update_checksum(object hash, array(string) dirs, string dir, string tail, int recurse) {
-	foreach (list_config_dir(dirs, "/" + dir), string fn) {
-		if (has_suffix(fn, tail)) hash->update(Stdio.read_file(fn));
-		if (recurse && Stdio.is_dir(fn)) update_checksum(hash, dirs, fn, tail, 1);
-	}
-}
-
-string calculate_checksum(array(string) mod_filenames) {
-	array dirs = find_mod_directories(mod_filenames);
-	mapping manifest = parse_eu4txt(Stdio.read_file(PROGRAM_PATH + "/checksum_manifest.txt"));
-	//The hash stored in the EU4 files is the right length for MD5. However, simply using MD5
-	//here doesn't give the same result. It might be that it's not MD5, it might be that I'm
-	//processing the files in the wrong order, it might be that the file names themselves are
-	//included in the hash, or it might be something else entirely. Fortunately I don't need
-	//to perfectly match the hash (it would be nice, but it's not vital); I can just update
-	//everything any time I see a change.
-	//object hash = Crypto.MD5();
-	object hash = Crypto.SHA1(); //Nearly as fast as MD5 and probably a better choice. SHA256 is safer but unnecessary, and a lot slower.
-	foreach (manifest->directory, mapping dir)
-		update_checksum(hash, dirs, dir->name, dir->file_extension, dir->sub_directories);
-	return sprintf("%@02x", (array)hash->digest());
-}
 
 Stdio.File pipe;
 int totsize, fraction, nextmark, percentage;
