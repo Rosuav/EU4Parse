@@ -391,8 +391,9 @@ log = \"PROV-TERRAIN-END\"
 			raw = replace(raw, ";", "");
 			mapping data = parse_eu4txt(raw);
 			array sprites = data->?spriteTypes->?spriteType;
-			if (sprites) foreach (Array.arrayify(sprites), mapping sprite)
-				icons[sprite->name] += ({sprite->texturefile});
+			if (sprites) foreach (Array.arrayify(sprites), array|mapping sprite)
+				//I don't think I ever need the ones that have arrays??? Maybe??
+				if (mappingp(sprite)) icons[sprite->name] += ({sprite->texturefile});
 		}
 		//Note that caching of l10n files has been dropped; ultimately, this entire GameConfig could be cached.
 		foreach (config_dirs, string dir)
