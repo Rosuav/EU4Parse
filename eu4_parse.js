@@ -134,7 +134,7 @@ function update_hover_country(tag) {
 	const c = country_info[hovertag = tag];
 	const me = country_info[countrytag] || {tech: [0,0,0]};
 	document.querySelectorAll("#miltech .interesting2").forEach(el => el.classList.remove("interesting2"));
-	DOM("#miltech table").classList.add("hoverinactive");
+	const miltb = DOM("#miltech table"); if (miltb) miltb.classList.add("hoverinactive");
 	if (!c) {
 		replace_content("#hovercountry", "").classList.add("hidden");
 		return;
