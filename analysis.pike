@@ -455,6 +455,10 @@ void analyze_leviathans(mapping data, string name, string tag, mapping write) {
 		foreach (prov->great_projects, string project) {
 			mapping proj = data->great_projects[project] || (["development_tier": "0"]); //Weirdly, I have once seen a project that's just missing from the file.
 			mapping defn = G->CFG->great_projects[project];
+			if (!defn) { //FIXME: When are we seeing unknown projects??
+				werror("UNKNOWN PROJECT %O\n", project);
+				defn = (["can_use_modifiers_trigger": ({ })]);
+			}
 			//TODO: Parse out defn->can_use_modifiers_trigger and determine:
 			//1) Religion-locked (list religions and/or groups that are acceptable)
 			//   "province_is_or_accepts_religion_group", "province_is_buddhist_or_accepts_buddhism", "province_is_buddhist_or_accepts_buddhism_or_is_dharmic"
