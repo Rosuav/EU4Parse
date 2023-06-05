@@ -23,7 +23,7 @@ struct Array {
 const void *data;
 const char *next;
 size_t remaining;
-
+int yylex(void);
 int main(int argc, const char *argv[]) {
 	if (argc < 2) {printf("Need a file name\n"); return 1;}
 	int fd = open(argv[1], O_RDONLY|O_NOATIME);
@@ -32,7 +32,14 @@ int main(int argc, const char *argv[]) {
 	printf("size = %d\n", (int)size);
 	if (!size) data = "";
 	//Possible flags: MAP_NORESERVE MAP_POPULATE
-	else data = mmap(0, size, PROT_READ, MAP_POPULATE, fd, 0);
+	else {
+		data = mmap(NULL, size, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+		if (data == MAP_FAILED) {
+			perror("mmap");
+			close(fd);
+			return 1;
+		}
+	}
 	close(fd);
 	next = (char *)data;
 	remaining = size;
