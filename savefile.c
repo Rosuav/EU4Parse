@@ -23,12 +23,6 @@ struct Array {
 const void *data;
 const char *next;
 size_t remaining;
-int yylex(void) {
-	if (!remaining) return 0;
-	yylval = "foo";
-	remaining = 0;
-	return 258;
-}
 
 int main(int argc, const char *argv[]) {
 	if (argc < 2) {printf("Need a file name\n"); return 1;}

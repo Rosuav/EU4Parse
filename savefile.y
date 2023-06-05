@@ -38,3 +38,13 @@ value: "{" varlist "}" {take2};
 value: "{" array "}" {take2};
 value: "{" "}" {emptyarray};
 #endif
+
+extern const void *data;
+extern const char *next;
+extern size_t remaining;
+int yylex(void) {
+	if (!remaining) return YYEOF;
+	yylval = "foo";
+	remaining = 0;
+	return NUMBER;
+}
