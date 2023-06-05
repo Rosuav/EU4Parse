@@ -141,7 +141,17 @@ int main(int argc, const char *argv[]) {
 		close(fd);
 		printf("Saved to file.\n");
 	}
-	else printf("Remaining: %ld/%ld\n", remaining, size);
+	else {
+		int shoe = (char *)data - next, cap = remaining;
+		if (shoe < -16) shoe = -16;
+		if (cap > 64) cap = 64;
+		for (int i = shoe; i < cap; ++i)
+			printf("%c", next[i] < ' ' || next[i] > '~' ? '.' : next[i]);
+		printf("\n");
+		for (int i = shoe; i < 0; ++i)
+			printf("-");
+		printf("^\n");
+	}
 	if (size) munmap((void *)data, size); //Don't unmap until output_json is done as strings are referenced directly from the mmap
 	return 0;
 }
