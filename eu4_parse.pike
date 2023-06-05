@@ -53,6 +53,7 @@ int main(int argc, array(string) argv) {
 		TIME(CFG = G->parser->GameConfig());
 		string raw; TIME(raw = Stdio.read_file(G->globals->SAVE_PATH + "/" + fn));
 		mapping data; TIME(data = G->parser->parse_savefile_string(raw));
+		string json; TIME(json = Standards.JSON.encode(data));
 		write("Parse successful. Date: %s\n", data->date);
 		return 0;
 	}
