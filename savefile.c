@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 int yyparse(void);
+union YYSTYPE;
 
 //Linked list structures for subsequent JSON encoding
 struct String {
@@ -18,12 +19,12 @@ struct String {
 struct Map {
 	char sig; //'M'
 	struct String *key;
-	void *value; //Will be one of the union members
+	union YYSTYPE *value;
 	struct Map *next;
 };
 struct Array {
 	char sig; //'A'
-	void *value; //As above, will be a union member
+	union YYSTYPE *value;
 	struct Array *next;
 };
 struct String *make_string(const char *start, const char *next) {
@@ -37,7 +38,7 @@ struct String *make_string(const char *start, const char *next) {
 
 struct Map *savefile_result;
 
-struct Map *make_map(struct Map *next, struct String *key, void *value) {
+struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value) {
 	struct Map *ret = malloc(sizeof (struct Map));
 	printf("Building a map, k %p, v %p, next %p --> %p\n", key, value, next, ret);
 	if (!ret) return ret;
@@ -47,7 +48,7 @@ struct Map *make_map(struct Map *next, struct String *key, void *value) {
 	ret->value = value;
 }
 
-struct Array *make_array(struct Array *next, void *value) {
+struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 	struct Array *ret = malloc(sizeof (struct Array));
 	printf("Building an array, v %p, next %p --> %p\n", value, next, ret);
 	if (!ret) return ret;

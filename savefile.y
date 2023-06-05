@@ -9,10 +9,8 @@ license instead. */
 int yylex(void);
 void yyerror(const char *);
 struct Map; struct Array; struct String;
-struct String *make_string(const char *start, const char *next);
-struct Map *make_map(struct Map *next, struct String *key, void *value);
-struct Array *make_array(struct Array *next, void *value);
 extern struct Map *savefile_result;
+union YYSTYPE;
 %}
 
 %define api.value.type union
@@ -22,7 +20,13 @@ extern struct Map *savefile_result;
 %nterm <struct Map *> varlist savefile
 %nterm <struct Array *> array
 %nterm <struct String *> name
-%nterm <void *> value
+%nterm <union YYSTYPE *> value
+
+%{
+struct String *make_string(const char *start, const char *next);
+struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value);
+struct Array *make_array(struct Array *next, union YYSTYPE *value);
+%}
 
 %%
 
@@ -38,12 +42,12 @@ array: array value {$$ = make_array($1, $2);};
 
 name: STRING;
 
-value: NUMBER {$$ = $1;};
-value: STRING {$$ = $1;};
-value: BOOLEAN {$$ = $1;};
-value: '{' varlist '}' {$$ = $2;};
-value: '{' array '}' {$$ = $2;};
-value: '{' '}' {$$ = make_array(NULL, NULL);};
+value: NUMBER {$$ = (union YYSTYPE *)$1;};
+value: STRING {$$ = (union YYSTYPE *)$1;};
+value: BOOLEAN {$$ = (union YYSTYPE *)$1;};
+value: '{' varlist '}' {$$ = (union YYSTYPE *)$2;};
+value: '{' array '}' {$$ = (union YYSTYPE *)$2;};
+value: '{' '}' {$$ = (union YYSTYPE *)make_array(NULL, NULL);};
 %%
 
 extern const char *next;
