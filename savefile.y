@@ -44,7 +44,6 @@ array: array value {$$ = make_array($1, $2);};
 
 name: STRING;
 
-value: NUMBER {$$ = (union YYSTYPE *)$1;};
 value: STRING {$$ = (union YYSTYPE *)$1;};
 value: BOOLEAN {$$ = (union YYSTYPE *)$1;};
 value: '{' varlist '}' {$$ = (union YYSTYPE *)$2;};
@@ -83,8 +82,8 @@ int yylex(void) {
 				do {c = readchar();}
 				while ((c >= '0' && c <= '9') || c == '-' || c == '.');
 				--next; ++remaining; //Unget the character that ended the token
-				yylval.NUMBER = make_string(start, next, 0);
-				return NUMBER;
+				yylval.STRING = make_string(start, next, 1); //Numbers will get quoted as strings of digits
+				return STRING;
 			}
 			case '"': {
 				//Fairly naive handling of quoted strings.
