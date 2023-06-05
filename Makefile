@@ -3,3 +3,5 @@ savefile: savefile.c savefile.tab.c
 
 savefile.tab.c: savefile.y
 	bison $^
+
+%.c: %.y
