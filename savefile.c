@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 int yyparse(void);
-extern void *yylval;
 
 //Linked list structures for subsequent JSON encoding
 struct String {
@@ -29,14 +28,18 @@ struct Array {
 };
 struct String *make_string(const char *start, const char *next) {
 	struct String *ret = malloc(sizeof (struct String));
+	printf("Building a string from %p to %p --> %p\n", start, next, ret);
 	if (!ret) return ret;
 	ret->sig = 'S';
 	ret->start = start;
 	ret->length = next - start;
 }
 
+struct Map *savefile_result;
+
 struct Map *make_map(struct Map *next, struct String *key, void *value) {
 	struct Map *ret = malloc(sizeof (struct Map));
+	printf("Building a map, k %p, v %p, next %p --> %p\n", key, value, next, ret);
 	if (!ret) return ret;
 	ret->sig = 'M';
 	ret->next = next;
@@ -46,6 +49,7 @@ struct Map *make_map(struct Map *next, struct String *key, void *value) {
 
 struct Array *make_array(struct Array *next, void *value) {
 	struct Array *ret = malloc(sizeof (struct Array));
+	printf("Building an array, v %p, next %p --> %p\n", value, next, ret);
 	if (!ret) return ret;
 	ret->sig = 'A';
 	ret->next = next;
@@ -78,7 +82,7 @@ int main(int argc, const char *argv[]) {
 	printf("Hello, world!\n");
 	int ret = yyparse();
 	printf("Ret = %d\n", ret);
-	printf("yylval = %c\n", ((struct String *)yylval)->sig);
+	printf("result = %c\n", savefile_result->sig);
 	if (size) munmap((void *)data, size);
 	return 0;
 }

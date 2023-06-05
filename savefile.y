@@ -12,20 +12,21 @@ struct Map; struct Array; struct String;
 struct String *make_string(const char *start, const char *next);
 struct Map *make_map(struct Map *next, struct String *key, void *value);
 struct Array *make_array(struct Array *next, void *value);
+extern struct Map *savefile_result;
 %}
 
 %define api.value.type union
 %token <struct String *> NUMBER
 %token <struct String *> STRING
 %token <struct String *> BOOLEAN
-%nterm <struct Map *> varlist
+%nterm <struct Map *> varlist savefile
 %nterm <struct Array *> array
 %nterm <struct String *> name
 %nterm <void *> value
 
 %%
 
-savefile: varlist;
+savefile: varlist {savefile_result = $1;};
 
 /* Note that a varlist can't be empty */
 varlist: name '=' value {$$ = make_map(NULL, $1, $3);};
@@ -73,17 +74,11 @@ int yylex(void) {
 					//yylval = "HEX";
 					return NUMBER;
 				}
-				while (1) {
-					switch (readchar()) {
-						case '0': case '1': case '2': case '3': case '4':
-						case '5': case '6': case '7': case '8': case '9':
-						case '-': case '.': continue;
-						default: break;
-					}
-					break;
-				}
+				char c;
+				do {c = readchar();}
+				while ((c >= '0' && c <= '9') || c == '-' || c == '.');
+				--next; ++remaining; //Unget the character that ended the token
 				printf("Got a number from %p length %ld\n", start, next - start);
-				--next; //Unget the character that ended the token
 				yylval.NUMBER = make_string(start, next);
 				return NUMBER;
 			}
@@ -94,11 +89,11 @@ int yylex(void) {
 				if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 						|| c == '_' || c == '\'' || c == ':' || c > 128) {
 					//... collect all sequential atom characters as a token.
+					do {c = readchar();}
 					while ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-							|| c == '_' || c == '\'' || c == ':' || c > 128
-							|| (c >= '0' && c <= '9'))
-						c = readchar();
-					--next; //Unget the character that ended the token
+						|| c == '_' || c == '\'' || c == ':' || c > 128
+						|| (c >= '0' && c <= '9'));
+					--next; ++remaining; //Unget the character that ended the token
 					printf("Got a string from %p length %ld\n", start, next-start);
 					yylval.STRING = make_string(start, next);
 					return STRING;
