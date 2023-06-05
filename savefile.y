@@ -5,18 +5,20 @@ file, like every other file in the repo, is covered by the MIT
 license instead. */
 %{
 #include <stdio.h>
+#include <string.h>
 
 int yylex(void);
 void yyerror(const char *);
 struct Map; struct Array; struct String;
 extern struct Map *savefile_result;
+extern struct Boolean {char sig;} boolean[];
 union YYSTYPE;
 %}
 
 %define api.value.type union
 %token <struct String *> NUMBER
 %token <struct String *> STRING
-%token <struct String *> BOOLEAN
+%token <struct Boolean *> BOOLEAN
 %nterm <struct Map *> varlist savefile
 %nterm <struct Array *> array
 %nterm <struct String *> name
@@ -115,6 +117,17 @@ int yylex(void) {
 						|| c == '.' || c == '-' || (c >= '0' && c <= '9'));
 					--next; ++remaining; //Unget the character that ended the token
 					printf("Got a string from %p length %ld\n", start, next-start);
+					//Booleans are the strings "yes" and "no", not quoted.
+					if (next - start == 3 && !strncmp(start, "yes", 3)) {
+						printf("Is true\n");
+						yylval.BOOLEAN = boolean + 1;
+						return BOOLEAN;
+					}
+					if (next - start == 2 && !strncmp(start, "no", 2)) {
+						printf("Is false\n");
+						yylval.BOOLEAN = boolean + 0;
+						return BOOLEAN;
+					}
 					yylval.STRING = make_string(start, next, 1); //Add quotes to this one
 					return STRING;
 				}
@@ -126,17 +139,7 @@ int yylex(void) {
 }
 
 #if 0
-		if (array digits = data->sscanf("%[-0-9.]")) {
-			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
-			return ({"string", digits[0]});
-		}
 		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:]")) { //Include non-ASCII characters as letters
-			word = word[0];
-			//Unquoted tokens like institution_events.2 should be atoms, not atom-followed-by-number
-			if (array dotnumber = data->sscanf(".%[0-9]")) word += "." + dotnumber[0];
-			//Hyphenated mapping keys like maidan-e_naqsh-e_jahan should also be atoms.
-			while (array hyphenated = data->sscanf("-%[0-9a-zA-Z_'\x81-\xFF:]"))
-				word += "-" + hyphenated[0];
 			if ((<"yes", "no">)[word]) return ({"boolean", word == "yes"});
 			//Hack: this one element seems to omit the equals sign for some reason.
 			if (word == "map_area_data") ungetch = "=";

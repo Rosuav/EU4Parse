@@ -27,6 +27,7 @@ struct Array {
 	union YYSTYPE *value;
 	struct Array *next;
 };
+struct Boolean {char sig;} boolean[2] = {{'B'}, {'B'}}; //Identified by their pointers
 struct String *make_string(const char *start, const char *next, int quoted) {
 	struct String *ret = malloc(sizeof (struct String));
 	printf("Building a string from %p to %p --> %p\n", start, next, ret);
@@ -68,6 +69,9 @@ void output_json_string(int fd, struct String *value) {
 //Output as JSON and also deallocate memory
 void output_json(int fd, union YYSTYPE *value) {
 	if (!value) return; //Shouldn't happen
+	//Booleans are identified by their pointers.
+	if ((struct Boolean *)value == boolean) {write(fd, "false", 5); return;}
+	if ((struct Boolean *)value == boolean + 1) {write(fd, "true", 4); return;}
 	switch (((struct Array *)value)->sig) {
 		case 'M': {
 			struct Map *map = (struct Map *)value;
