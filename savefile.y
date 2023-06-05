@@ -23,7 +23,7 @@ union YYSTYPE;
 %nterm <union YYSTYPE *> value
 
 %{
-struct String *make_string(const char *start, const char *next);
+struct String *make_string(const char *start, const char *next, int quoted);
 struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value);
 struct Array *make_array(struct Array *next, union YYSTYPE *value);
 %}
@@ -73,18 +73,34 @@ int yylex(void) {
 				const char *start = next - 1;
 				//Special case: 0x introduces a hex value
 				if (*start == '0' && remaining && *next == 'x') {
-					//TODO
+					//TODO. Might make this able to read more config files.
 					printf("GOT HEX unimpl\n");
-					//yylval = "HEX";
-					return NUMBER;
+					return YYerror;
 				}
 				char c;
 				do {c = readchar();}
 				while ((c >= '0' && c <= '9') || c == '-' || c == '.');
 				--next; ++remaining; //Unget the character that ended the token
 				printf("Got a number from %p length %ld\n", start, next - start);
-				yylval.NUMBER = make_string(start, next);
+				yylval.NUMBER = make_string(start, next, 0);
 				return NUMBER;
+			}
+			case '"': {
+				//Fairly naive handling of quoted strings.
+				//Once we find a double quote, we scan for another, but ignoring the
+				//next character after any backslash. The entire section will be put
+				//into the JSON file unchanged, so we have to assume that the quoting
+				//rules are acceptable for JSON.
+				const char *start = next - 1;
+				char c;
+				do {
+					c = readchar();
+					if (c == '\\') readchar();
+				} while (c && c != '"');
+				if (!next[-1]) return YYerror; //TODO: Give a better message (unterminated string)
+				printf("Got a quote from %p length %ld\n", start, next - start);
+				yylval.STRING = make_string(start, next, 0); //Already includes its quotes
+				return STRING;
 			}
 			default: {
 				const char *start = next - 1;
@@ -96,10 +112,10 @@ int yylex(void) {
 					do {c = readchar();}
 					while ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 						|| c == '_' || c == '\'' || c == ':' || c > 128
-						|| (c >= '0' && c <= '9'));
+						|| c == '.' || c == '-' || (c >= '0' && c <= '9'));
 					--next; ++remaining; //Unget the character that ended the token
 					printf("Got a string from %p length %ld\n", start, next-start);
-					yylval.STRING = make_string(start, next);
+					yylval.STRING = make_string(start, next, 1); //Add quotes to this one
 					return STRING;
 				}
 				printf("Returning character '%c' as a token\n", c);
@@ -110,16 +126,6 @@ int yylex(void) {
 }
 
 #if 0
-		if (array str = data->sscanf("\"%[^\"]\"")) {
-			//Fairly naive handling of backslashes and quotes. It might be better to do this more properly.
-			string lit = str[0];
-			while (lit != "" && lit[-1] == '\\') {
-				str = data->sscanf("%[^\"]\"");
-				if (!str) break; //Should possibly be a parse error?
-				lit += "\"" + str[0];
-			}
-			return ({"string", replace(lit, "\\\\", "\\")});
-		}
 		if (array digits = data->sscanf("%[-0-9.]")) {
 			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
 			return ({"string", digits[0]});

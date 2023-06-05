@@ -27,11 +27,11 @@ struct Array {
 	union YYSTYPE *value;
 	struct Array *next;
 };
-struct String *make_string(const char *start, const char *next) {
+struct String *make_string(const char *start, const char *next, int quoted) {
 	struct String *ret = malloc(sizeof (struct String));
 	printf("Building a string from %p to %p --> %p\n", start, next, ret);
 	if (!ret) return ret;
-	ret->sig = 'S';
+	ret->sig = quoted ? 'S' : 's';
 	ret->start = start;
 	ret->length = next - start;
 }
@@ -59,9 +59,10 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 
 //Output a string (or possibly related values) but does NOT deallocate memory
 void output_json_string(int fd, struct String *value) {
-	write(fd, "\"", 1);
+	int quoted = value->sig == 'S';
+	if (quoted) write(fd, "\"", 1);
 	write(fd, value->start, value->length);
-	write(fd, "\"", 1);
+	if (quoted) write(fd, "\"", 1);
 }
 
 //Output as JSON and also deallocate memory
@@ -92,7 +93,7 @@ void output_json(int fd, union YYSTYPE *value) {
 			write(fd, "]", 1);
 			break;
 		}
-		case 'S': output_json_string(fd, (struct String *)value); break;
+		case 'S': case 's': output_json_string(fd, (struct String *)value); break;
 		default: break; //Shouldn't happen (error maybe?)
 	}
 	free(value);
