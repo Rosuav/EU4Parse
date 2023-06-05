@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 int yyparse(void);
 union YYSTYPE;
 
@@ -30,7 +31,6 @@ struct Array {
 struct Boolean {char sig;} boolean[2] = {{'B'}, {'B'}}; //Identified by their pointers
 struct String *make_string(const char *start, const char *next, int quoted) {
 	struct String *ret = malloc(sizeof (struct String));
-	printf("Building a string from %p to %p --> %p\n", start, next, ret);
 	if (!ret) return ret;
 	ret->sig = quoted ? 'S' : 's';
 	ret->start = start;
@@ -41,7 +41,6 @@ struct Map *savefile_result;
 
 struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value) {
 	struct Map *ret = malloc(sizeof (struct Map));
-	printf("Building a map, k %p, v %p, next %p --> %p\n", key, value, next, ret);
 	if (!ret) return ret;
 	ret->sig = 'M';
 	ret->next = next;
@@ -51,7 +50,6 @@ struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value)
 
 struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 	struct Array *ret = malloc(sizeof (struct Array));
-	printf("Building an array, v %p, next %p --> %p\n", value, next, ret);
 	if (!ret) return ret;
 	ret->sig = 'A';
 	ret->next = next;
@@ -132,13 +130,19 @@ int main(int argc, const char *argv[]) {
 	close(fd);
 	next = (char *)data;
 	remaining = size;
+	//A save file should begin with the prefix "EU4txt". If it doesn't, it might be
+	//a config file, or it might be compressed. TODO: Unzip into memory.
+	if (remaining > 6 && !strncmp(next, "EU4txt", 6)) {remaining += 6; next += 6;}
 	int ret = yyparse();
-	printf("Ret = %d\n", ret);
-	//TODO: Output to file?
-	write(1, "result: ", sizeof "result:");
-	output_json(1, (union YYSTYPE *)savefile_result);
-	printf("\n");
-	if (size) munmap((void *)data, size);
+	if (!ret) {
+		fd = open("savefile.json", O_WRONLY|O_CREAT, 0644);
+		write(fd, "result: ", sizeof "result:");
+		output_json(fd, (union YYSTYPE *)savefile_result);
+		close(fd);
+		printf("Saved to file.\n");
+	}
+	else printf("Remaining: %ld/%ld\n", remaining, size);
+	if (size) munmap((void *)data, size); //Don't unmap until output_json is done as strings are referenced directly from the mmap
 	return 0;
 }
 

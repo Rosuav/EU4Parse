@@ -83,7 +83,6 @@ int yylex(void) {
 				do {c = readchar();}
 				while ((c >= '0' && c <= '9') || c == '-' || c == '.');
 				--next; ++remaining; //Unget the character that ended the token
-				printf("Got a number from %p length %ld\n", start, next - start);
 				yylval.NUMBER = make_string(start, next, 0);
 				return NUMBER;
 			}
@@ -100,7 +99,6 @@ int yylex(void) {
 					if (c == '\\') readchar();
 				} while (c && c != '"');
 				if (!next[-1]) return YYerror; //TODO: Give a better message (unterminated string)
-				printf("Got a quote from %p length %ld\n", start, next - start);
 				yylval.STRING = make_string(start, next, 0); //Already includes its quotes
 				return STRING;
 			}
@@ -116,15 +114,12 @@ int yylex(void) {
 						|| c == '_' || c == '\'' || c == ':' || c > 128
 						|| c == '.' || c == '-' || (c >= '0' && c <= '9'));
 					--next; ++remaining; //Unget the character that ended the token
-					printf("Got a string from %p length %ld\n", start, next-start);
 					//Booleans are the strings "yes" and "no", not quoted.
 					if (next - start == 3 && !strncmp(start, "yes", 3)) {
-						printf("Is true\n");
 						yylval.BOOLEAN = boolean + 1;
 						return BOOLEAN;
 					}
 					if (next - start == 2 && !strncmp(start, "no", 2)) {
-						printf("Is false\n");
 						yylval.BOOLEAN = boolean + 0;
 						return BOOLEAN;
 					}
@@ -134,7 +129,6 @@ int yylex(void) {
 						hack_nexttoken = '=';
 					return STRING;
 				}
-				printf("Returning character '%c' as a token\n", c);
 				return c; //Unknown character, probably punctuation.
 			}
 		}
