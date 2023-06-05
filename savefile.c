@@ -57,54 +57,54 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 }
 
 //Mutually recursive output functions
-void output_json(int fd, union YYSTYPE *value);
+void output_json(FILE *fp, union YYSTYPE *value);
 //Also outputs some non-string values
-void output_json_string(int fd, struct String *str) {
+void output_json_string(FILE *fp, struct String *str) {
 	int quoted = str->sig == 'S';
-	if (quoted) write(fd, "\"", 1);
-	write(fd, str->start, str->length);
-	if (quoted) write(fd, "\"", 1);
+	if (quoted) fputc('"', fp);
+	fwrite(str->start, 1, str->length, fp);
+	if (quoted) fputc('"', fp);
 	free(str);
 }
 
-void output_json_mapping(int fd, struct Map *map) {
+void output_json_mapping(FILE *fp, struct Map *map) {
 	if (map->next) {
-		output_json_mapping(fd, map->next);
-		write(fd, ",", 1);
+		output_json_mapping(fp, map->next);
+		fputc(',', fp);
 	}
-	output_json_string(fd, map->key);
-	write(fd, ":", 1);
-	output_json(fd, map->value);
+	output_json_string(fp, map->key);
+	fputc(':', fp);
+	output_json(fp, map->value);
 	free(map);
 }
 
-void output_json_array(int fd, struct Array *arr) {
+void output_json_array(FILE *fp, struct Array *arr) {
 	if (arr->next) {
-		output_json_array(fd, arr->next);
-		write(fd, ",", 1);
+		output_json_array(fp, arr->next);
+		fputc(',', fp);
 	}
-	if (arr->value) output_json(fd, arr->value); //Empty arrays have null value pointers.
+	if (arr->value) output_json(fp, arr->value); //Empty arrays have null value pointers.
 	free(arr);
 }
 
 //Output as JSON and also deallocate memory
-void output_json(int fd, union YYSTYPE *value) {
+void output_json(FILE *fp, union YYSTYPE *value) {
 	if (!value) return; //Shouldn't happen
 	//Booleans are identified by their pointers.
-	if ((struct Boolean *)value == boolean) {write(fd, "false", 5); return;}
-	if ((struct Boolean *)value == boolean + 1) {write(fd, "true", 4); return;}
+	if ((struct Boolean *)value == boolean) {fputs("false", fp); return;}
+	if ((struct Boolean *)value == boolean + 1) {fputs("true", fp); return;}
 	switch (((struct Array *)value)->sig) {
 		case 'M':
-			write(fd, "{", 1);
-			output_json_mapping(fd, (struct Map *)value);
-			write(fd, "}", 1);
+			fputc('{', fp);
+			output_json_mapping(fp, (struct Map *)value);
+			fputc('}', fp);
 			break;
 		case 'A':
-			write(fd, "[", 1);
-			output_json_array(fd, (struct Array *)value);
-			write(fd, "]", 1);
+			fputc('[', fp);
+			output_json_array(fp, (struct Array *)value);
+			fputc(']', fp);
 			break;
-		case 'S': case 's': output_json_string(fd, (struct String *)value); break;
+		case 'S': case 's': output_json_string(fp, (struct String *)value); break;
 		default: break; //Shouldn't happen (error maybe?)
 	}
 }
@@ -135,10 +135,9 @@ int main(int argc, const char *argv[]) {
 	if (remaining > 6 && !strncmp(next, "EU4txt", 6)) {remaining += 6; next += 6;}
 	int ret = yyparse();
 	if (!ret) {
-		fd = open("savefile.json", O_WRONLY|O_CREAT, 0644);
-		write(fd, "result: ", sizeof "result:");
-		output_json(fd, (union YYSTYPE *)savefile_result);
-		close(fd);
+		FILE *fp = fopen("savefile.json", "w");
+		output_json(fp, (union YYSTYPE *)savefile_result);
+		fclose(fp);
 		printf("Saved to file.\n");
 	}
 	else {
