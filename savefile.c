@@ -11,24 +11,45 @@ int yyparse(void);
 extern void *yylval;
 
 //Linked list structures for subsequent JSON encoding
+struct String {
+	char sig; //'S'
+	const char *start;
+	size_t length;
+};
 struct Map {
-	int key;
-	int value;
+	char sig; //'M'
+	struct String *key;
+	void *value; //Will be one of the union members
 	struct Map *next;
 };
 struct Array {
-	int value;
+	char sig; //'A'
+	void *value; //As above, will be a union member
 	struct Array *next;
-};
-struct String {
-	const char *start;
-	size_t length;
 };
 struct String *make_string(const char *start, const char *next) {
 	struct String *ret = malloc(sizeof (struct String));
 	if (!ret) return ret;
+	ret->sig = 'S';
 	ret->start = start;
 	ret->length = next - start;
+}
+
+struct Map *make_map(struct Map *next, struct String *key, void *value) {
+	struct Map *ret = malloc(sizeof (struct Map));
+	if (!ret) return ret;
+	ret->sig = 'M';
+	ret->next = next;
+	ret->key = key;
+	ret->value = value;
+}
+
+struct Array *make_array(struct Array *next, void *value) {
+	struct Array *ret = malloc(sizeof (struct Array));
+	if (!ret) return ret;
+	ret->sig = 'A';
+	ret->next = next;
+	ret->value = value;
 }
 
 const void *data;
@@ -57,6 +78,7 @@ int main(int argc, const char *argv[]) {
 	printf("Hello, world!\n");
 	int ret = yyparse();
 	printf("Ret = %d\n", ret);
+	printf("yylval = %c\n", ((struct String *)yylval)->sig);
 	if (size) munmap((void *)data, size);
 	return 0;
 }

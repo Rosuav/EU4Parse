@@ -10,33 +10,39 @@ int yylex(void);
 void yyerror(const char *);
 struct Map; struct Array; struct String;
 struct String *make_string(const char *start, const char *next);
+struct Map *make_map(struct Map *next, struct String *key, void *value);
+struct Array *make_array(struct Array *next, void *value);
 %}
 
 %define api.value.type union
 %token <struct String *> NUMBER
 %token <struct String *> STRING
 %token <struct String *> BOOLEAN
+%nterm <struct Map *> varlist
+%nterm <struct Array *> array
+%nterm <struct String *> name
+%nterm <void *> value
 
 %%
 
 savefile: varlist;
 
 /* Note that a varlist can't be empty */
-varlist: name '=' value /*{makemapping}*/;
-varlist: varlist name '=' value /*{addmapping}*/;
+varlist: name '=' value {$$ = make_map(NULL, $1, $3);};
+varlist: varlist name '=' value {$$ = make_map($1, $2, $4);};
 varlist: varlist '{' '}'; /* Weird oddity at one point in the save file - a bunch of empty blocks in what should be a mapping */
 /* Nor can an array, although the definition of a value includes an empty array */
-array: value /*{make_array}*/;
-array: array value /*{add_array}*/;
+array: value {$$ = make_array(NULL, $1);};
+array: array value {$$ = make_array($1, $2);};
 
 name: STRING;
 
-value: NUMBER;
-value: STRING;
-value: BOOLEAN;
-value: '{' varlist '}' /*{take2}*/;
-value: '{' array '}' /*{take2}*/;
-value: '{' '}' /*{emptyarray}*/;
+value: NUMBER {$$ = $1;};
+value: STRING {$$ = $1;};
+value: BOOLEAN {$$ = $1;};
+value: '{' varlist '}' {$$ = $2;};
+value: '{' array '}' {$$ = $2;};
+value: '{' '}' {$$ = make_array(NULL, NULL);};
 %%
 
 extern const char *next;
@@ -78,7 +84,7 @@ int yylex(void) {
 				}
 				printf("Got a number from %p length %ld\n", start, next - start);
 				--next; //Unget the character that ended the token
-				yylval = (YYSTYPE)make_string(start, next);
+				yylval.NUMBER = make_string(start, next);
 				return NUMBER;
 			}
 			default: {
@@ -94,7 +100,7 @@ int yylex(void) {
 						c = readchar();
 					--next; //Unget the character that ended the token
 					printf("Got a string from %p length %ld\n", start, next-start);
-					yylval = (YYSTYPE)make_string(start, next);
+					yylval.STRING = make_string(start, next);
 					return STRING;
 				}
 				printf("Returning character '%c' as a token\n", c);
