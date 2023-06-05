@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 int yyparse(void);
 extern void *yylval;
 
@@ -19,6 +20,16 @@ struct Array {
 	int value;
 	struct Array *next;
 };
+struct String {
+	const char *start;
+	size_t length;
+};
+struct String *make_string(const char *start, const char *next) {
+	struct String *ret = malloc(sizeof (struct String));
+	if (!ret) return ret;
+	ret->start = start;
+	ret->length = next - start;
+}
 
 const void *data;
 const char *next;

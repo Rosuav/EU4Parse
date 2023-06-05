@@ -8,12 +8,14 @@ license instead. */
 
 int yylex(void);
 void yyerror(const char *);
+struct Map; struct Array; struct String;
+struct String *make_string(const char *start, const char *next);
 %}
 
-%define api.value.type {void *}
-%token NUMBER
-%token STRING
-%token BOOLEAN
+%define api.value.type union
+%token <struct String *> NUMBER
+%token <struct String *> STRING
+%token <struct String *> BOOLEAN
 
 %%
 
@@ -62,7 +64,7 @@ int yylex(void) {
 				if (*start == '0' && remaining && *next == 'x') {
 					//TODO
 					printf("GOT HEX unimpl\n");
-					yylval = "HEX";
+					//yylval = "HEX";
 					return NUMBER;
 				}
 				while (1) {
@@ -76,7 +78,7 @@ int yylex(void) {
 				}
 				printf("Got a number from %p length %ld\n", start, next - start);
 				--next; //Unget the character that ended the token
-				yylval = "number";
+				yylval = (YYSTYPE)make_string(start, next);
 				return NUMBER;
 			}
 			default: {
@@ -92,7 +94,7 @@ int yylex(void) {
 						c = readchar();
 					--next; //Unget the character that ended the token
 					printf("Got a string from %p length %ld\n", start, next-start);
-					yylval = "token";
+					yylval = (YYSTYPE)make_string(start, next);
 					return STRING;
 				}
 				printf("Returning character '%c' as a token\n", c);
