@@ -58,12 +58,35 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 	ret->value = value;
 }
 
-//Output a string (or possibly related values) but does NOT deallocate memory
-void output_json_string(int fd, struct String *value) {
-	int quoted = value->sig == 'S';
+//Mutually recursive output functions
+void output_json(int fd, union YYSTYPE *value);
+//Also outputs some non-string values
+void output_json_string(int fd, struct String *str) {
+	int quoted = str->sig == 'S';
 	if (quoted) write(fd, "\"", 1);
-	write(fd, value->start, value->length);
+	write(fd, str->start, str->length);
 	if (quoted) write(fd, "\"", 1);
+	free(str);
+}
+
+void output_json_mapping(int fd, struct Map *map) {
+	if (map->next) {
+		output_json_mapping(fd, map->next);
+		write(fd, ",", 1);
+	}
+	output_json_string(fd, map->key);
+	write(fd, ":", 1);
+	output_json(fd, map->value);
+	free(map);
+}
+
+void output_json_array(int fd, struct Array *arr) {
+	if (arr->next) {
+		output_json_array(fd, arr->next);
+		write(fd, ",", 1);
+	}
+	if (arr->value) output_json(fd, arr->value); //Empty arrays have null value pointers.
+	free(arr);
 }
 
 //Output as JSON and also deallocate memory
@@ -73,34 +96,19 @@ void output_json(int fd, union YYSTYPE *value) {
 	if ((struct Boolean *)value == boolean) {write(fd, "false", 5); return;}
 	if ((struct Boolean *)value == boolean + 1) {write(fd, "true", 4); return;}
 	switch (((struct Array *)value)->sig) {
-		case 'M': {
-			struct Map *map = (struct Map *)value;
+		case 'M':
 			write(fd, "{", 1);
-			while (map) {
-				output_json_string(fd, map->key); free(map->key);
-				write(fd, ":", 1);
-				output_json(fd, map->value);
-				map = map->next;
-				if (map) write(fd, ",", 1); //Omit the comma on the last one
-			}
+			output_json_mapping(fd, (struct Map *)value);
 			write(fd, "}", 1);
 			break;
-		}
-		case 'A': {
-			struct Array *arr = (struct Array *)value;
+		case 'A':
 			write(fd, "[", 1);
-			if (arr->value) output_json(fd, arr->value); //Empty arrays have null value pointers.
-			while (arr = arr->next) {
-				write(fd, ",", 1);
-				output_json(fd, arr->value);
-			}
+			output_json_array(fd, (struct Array *)value);
 			write(fd, "]", 1);
 			break;
-		}
 		case 'S': case 's': output_json_string(fd, (struct String *)value); break;
 		default: break; //Shouldn't happen (error maybe?)
 	}
-	free(value);
 }
 
 const void *data;
