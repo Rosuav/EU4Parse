@@ -76,6 +76,7 @@ void output_json(int fd, union YYSTYPE *value) {
 				write(fd, ":", 1);
 				output_json(fd, map->value);
 				map = map->next;
+				if (map) write(fd, ",", 1); //Omit the comma on the last one
 			}
 			write(fd, "}", 1);
 			break;
@@ -85,8 +86,8 @@ void output_json(int fd, union YYSTYPE *value) {
 			write(fd, "[", 1);
 			if (arr->value) output_json(fd, arr->value); //Empty arrays have null value pointers.
 			while (arr = arr->next) {
-				output_json(fd, arr->value);
 				write(fd, ",", 1);
+				output_json(fd, arr->value);
 			}
 			write(fd, "]", 1);
 			break;
