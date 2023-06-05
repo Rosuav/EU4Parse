@@ -57,6 +57,46 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 	ret->value = value;
 }
 
+//Output a string (or possibly related values) but does NOT deallocate memory
+void output_json_string(int fd, struct String *value) {
+	write(fd, "\"", 1);
+	write(fd, value->start, value->length);
+	write(fd, "\"", 1);
+}
+
+//Output as JSON and also deallocate memory
+void output_json(int fd, union YYSTYPE *value) {
+	if (!value) return; //Shouldn't happen
+	switch (((struct Array *)value)->sig) {
+		case 'M': {
+			struct Map *map = (struct Map *)value;
+			write(fd, "{", 1);
+			while (map) {
+				output_json_string(fd, map->key); free(map->key);
+				write(fd, ":", 1);
+				output_json(fd, map->value);
+				map = map->next;
+			}
+			write(fd, "}", 1);
+			break;
+		}
+		case 'A': {
+			struct Array *arr = (struct Array *)value;
+			write(fd, "[", 1);
+			if (arr->value) output_json(fd, arr->value); //Empty arrays have null value pointers.
+			while (arr = arr->next) {
+				output_json(fd, arr->value);
+				write(fd, ",", 1);
+			}
+			write(fd, "]", 1);
+			break;
+		}
+		case 'S': output_json_string(fd, (struct String *)value); break;
+		default: break; //Shouldn't happen (error maybe?)
+	}
+	free(value);
+}
+
 const void *data;
 const char *next;
 size_t remaining;
@@ -64,9 +104,7 @@ int yylex(void);
 int main(int argc, const char *argv[]) {
 	if (argc < 2) {printf("Need a file name\n"); return 1;}
 	int fd = open(argv[1], O_RDONLY|O_NOATIME);
-	printf("fd = %d\n", fd);
 	off_t size = lseek(fd, 0, SEEK_END);
-	printf("size = %d\n", (int)size);
 	if (!size) data = "";
 	//Possible flags: MAP_NORESERVE MAP_POPULATE
 	else {
@@ -80,10 +118,12 @@ int main(int argc, const char *argv[]) {
 	close(fd);
 	next = (char *)data;
 	remaining = size;
-	printf("Hello, world!\n");
 	int ret = yyparse();
 	printf("Ret = %d\n", ret);
-	printf("result = %c\n", savefile_result->sig);
+	//TODO: Output to file?
+	write(1, "result: ", sizeof "result:");
+	output_json(1, (union YYSTYPE *)savefile_result);
+	printf("\n");
 	if (size) munmap((void *)data, size);
 	return 0;
 }
