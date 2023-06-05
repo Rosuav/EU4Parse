@@ -129,6 +129,9 @@ int yylex(void) {
 						return BOOLEAN;
 					}
 					yylval.STRING = make_string(start, next, 1); //Add quotes to this one
+					//Hack: this one element seems to omit the equals sign for some reason.
+					if (next - start == 13 && !strncmp(start, "map_area_data", 13))
+						hack_nexttoken = '=';
 					return STRING;
 				}
 				printf("Returning character '%c' as a token\n", c);
@@ -137,13 +140,3 @@ int yylex(void) {
 		}
 	}
 }
-
-#if 0
-		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:]")) { //Include non-ASCII characters as letters
-			if ((<"yes", "no">)[word]) return ({"boolean", word == "yes"});
-			//Hack: this one element seems to omit the equals sign for some reason.
-			if (word == "map_area_data") ungetch = "=";
-			return ({"string", word});
-		}
-		return data->read(1);
-#endif
