@@ -1,6 +1,10 @@
 //Parse an EU4 save file (and possibly some config files but not all)
 //and output a JSON blob with equivalent information.
 
+#define _GNU_SOURCE
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdio.h>
 int yyparse(void);
 extern void *yylval;
@@ -16,17 +20,32 @@ struct Array {
 	struct Array *next;
 };
 
-int state;
+const void *data;
+const char *next;
+size_t remaining;
 int yylex(void) {
-	if (state) {yylval = "foo"; state = 0; return 258;}
-	return 0;
+	if (!remaining) return 0;
+	yylval = "foo";
+	remaining = 0;
+	return 258;
 }
 
-int main() {
+int main(int argc, const char *argv[]) {
+	if (argc < 2) {printf("Need a file name\n"); return 1;}
+	int fd = open(argv[1], O_RDONLY|O_NOATIME);
+	printf("fd = %d\n", fd);
+	off_t size = lseek(fd, 0, SEEK_END);
+	printf("size = %d\n", (int)size);
+	if (!size) data = "";
+	//Possible flags: MAP_NORESERVE MAP_POPULATE
+	else data = mmap(0, size, PROT_READ, MAP_POPULATE, fd, 0);
+	close(fd);
+	next = (char *)data;
+	remaining = size;
 	printf("Hello, world!\n");
-	state = 1;
 	int ret = yyparse();
 	printf("Ret = %d\n", ret);
+	if (size) munmap((void *)data, size);
 	return 0;
 }
 
