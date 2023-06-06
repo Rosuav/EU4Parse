@@ -62,7 +62,16 @@ void output_json(FILE *fp, union YYSTYPE *value);
 void output_json_string(FILE *fp, struct String *str) {
 	int quoted = str->sig == 'S';
 	if (quoted) fputc('"', fp);
-	fwrite(str->start, 1, str->length, fp);
+	//If we could be sure the string was entirely ASCII, this would be fine.
+	//Unfortunately, this won't work with anything non-ASCII, since the save
+	//file is encoded ISO-8859-1 and JSON has to be UTF-8. So we do it one
+	//character at a time instead.
+	//fwrite(str->start, 1, str->length, fp);
+	const unsigned char *stop = str->start + str->length;
+	for (const unsigned char *ch = str->start; ch < stop; ++ch) {
+		if (*ch < 128) fputc(*ch, fp);
+		else fprintf(fp, "\\u%04x", *ch);
+	}
 	if (quoted) fputc('"', fp);
 	free(str);
 }
