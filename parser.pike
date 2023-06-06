@@ -752,6 +752,13 @@ mapping parse_savefile(string data, string|void filename) {
 void piperead(object pipe, object incoming) {
 	while (array ret = incoming->sscanf("%s\n")) {
 		[string fn] = ret;
+		//The C-implemented parser is WAY faster, but can't handle all files. Notably, it cannot
+		//(as of 20230606) handle compressed saves. So we take a small gamble: try the C parser,
+		//which costs a second or two; if it works, nothing else matters (we won't hash it), but
+		//if it succeeds, we've saved over a minute of CPU processing.
+		//int ret = Process.create_process(({"./savefile", fn, "eu4_parse.json", "--hash"}))->wait();
+		//if (!ret) {pipe->write("~"); continue;} //We win!
+		//Guess we lost the bet. Fall back on reading it into memory and using the Pike parser.
 		string raw = Stdio.read_file(fn); //Assumes ISO-8859-1, which I think is correct
 		if (parse_savefile(raw, basename(fn))) pipe->write("~"); //Signal the parent. It can read it back from the cache.
 	}
