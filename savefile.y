@@ -48,7 +48,7 @@ value: STRING {$$ = (union YYSTYPE *)$1;};
 value: BOOLEAN {$$ = (union YYSTYPE *)$1;};
 value: '{' varlist '}' {$$ = (union YYSTYPE *)$2;};
 value: '{' array '}' {$$ = (union YYSTYPE *)$2;};
-value: '{' '}' {$$ = (union YYSTYPE *)make_array(NULL, NULL);};
+value: '{' '}' {$$ = (union YYSTYPE *)make_map(NULL, NULL, NULL);};
 %%
 
 extern const char *next;

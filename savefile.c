@@ -106,6 +106,7 @@ void output_json_string(FILE *fp, struct String *str) {
 }
 
 int output_json_mapping(FILE *fp, struct Map *map, int add_index) {
+	if (!map->value) {free(map); return add_index;} //Empty maps have null key and value pointers.
 	//Special case: Retain _index entries for the countries.
 	int want_order = map->key->length == 9 && !strncmp(map->key->start, "countries", 9) && ((struct Map *)map->value)->sig == 'M';
 	if (map->next) {
