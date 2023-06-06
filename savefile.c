@@ -143,8 +143,8 @@ void output_json_array(FILE *fp, struct Array *arr) {
 void output_json(FILE *fp, union YYSTYPE *value) {
 	if (!value) return; //Shouldn't happen
 	//Booleans are identified by their pointers.
-	if ((struct Boolean *)value == boolean) {fputs("false", fp); return;}
-	if ((struct Boolean *)value == boolean + 1) {fputs("true", fp); return;}
+	if ((struct Boolean *)value == boolean) {fputc('0', fp); return;}
+	if ((struct Boolean *)value == boolean + 1) {fputc('1', fp); return;}
 	switch (((struct Array *)value)->sig) {
 		case 'M':
 			fputc('{', fp);
