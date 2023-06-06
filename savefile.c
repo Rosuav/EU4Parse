@@ -39,20 +39,20 @@ struct String *make_string(const char *start, const char *next, int quoted) {
 
 struct Map *savefile_result;
 
+struct Array *make_array(struct Array *next, union YYSTYPE *value) {
+	struct Array *ret = malloc(sizeof (struct Array));
+	if (!ret) return ret;
+	ret->sig = 'A';
+	ret->next = next;
+	ret->value = value;
+}
+
 struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value) {
 	struct Map *ret = malloc(sizeof (struct Map));
 	if (!ret) return ret;
 	ret->sig = 'M';
 	ret->next = next;
 	ret->key = key;
-	ret->value = value;
-}
-
-struct Array *make_array(struct Array *next, union YYSTYPE *value) {
-	struct Array *ret = malloc(sizeof (struct Array));
-	if (!ret) return ret;
-	ret->sig = 'A';
-	ret->next = next;
 	ret->value = value;
 }
 
