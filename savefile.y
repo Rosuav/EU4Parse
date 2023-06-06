@@ -72,23 +72,6 @@ int yylex(void) {
 			case '#': //Strip comments (needed in savefiles? maybe not?)
 				do {if (readchar() == '\n') break;} while (remaining);
 				break;
-			case '0': case '1': case '2': case '3': case '4':
-			case '5': case '6': case '7': case '8': case '9':
-			case '-': case '.': {
-				const char *start = next - 1;
-				//Special case: 0x introduces a hex value
-				if (*start == '0' && remaining && *next == 'x') {
-					//TODO. Might make this able to read more config files.
-					printf("GOT HEX unimpl\n");
-					return YYerror;
-				}
-				char c;
-				do {c = readchar();}
-				while ((c >= '0' && c <= '9') || c == '-' || c == '.');
-				--next; ++remaining; //Unget the character that ended the token
-				yylval.STRING = make_string(start, next, 1); //Numbers will get quoted as strings of digits
-				return STRING;
-			}
 			case '"': {
 				//Fairly naive handling of quoted strings.
 				//Once we find a double quote, we scan for another, but ignoring the
@@ -108,14 +91,19 @@ int yylex(void) {
 			default: {
 				const char *start = next - 1;
 				char c = *start;
-				//If it starts with a suitable atom character...
-				if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-						|| c == '_' || c == '\'' || c == ':' || c > 128) {
-					//... collect all sequential atom characters as a token.
-					do {c = readchar();}
-					while ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-						|| c == '_' || c == '\'' || c == ':' || c > 128
-						|| c == '.' || c == '-' || (c >= '0' && c <= '9'));
+				//Special case: 0x introduces a hex value
+				if (*start == '0' && remaining && *next == 'x') {
+					//TODO. Might make this able to read more config files.
+					printf("GOT HEX unimpl\n");
+					return YYerror;
+				}
+				//Scan for any sequence of atom characters. Yes, this DOES include starting
+				//with a digit. This will handle numbers, but also "25_permanent_power_projection".
+				while ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+					|| c == '_' || c == '\'' || c == ':' || c > 128
+					|| c == '.' || c == '-' || (c >= '0' && c <= '9'))
+						c = readchar();
+				if (next > start + 1) {
 					--next; ++remaining; //Unget the character that ended the token
 					//Booleans are the strings "yes" and "no", not quoted.
 					if (next - start == 3 && !strncmp(start, "yes", 3)) {
