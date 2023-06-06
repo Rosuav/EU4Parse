@@ -240,9 +240,14 @@ class GameConfig {
 		array ret = ({([])}); //Ensure that we at least have an empty mapping even if no config files
 		array filenames = list_config_dir(config_dirs, dir);
 		foreach (filenames, string fn) {
-			string data = Stdio.read_file(fn) + "\n";
-			if (fn == "DOM_Spain_Missions.txt") data += "}\n"; //HACK: As of 20230419, this file is missing a final close brace.
-			mapping cur = parse_eu4txt(data) || ([]);
+			mapping cur;
+			//TODO: Know which ones are never going to work and skip the C attempt
+			catch {cur = Standards.JSON.decode(Process.run(({"./savefile", fn}))->stdout);};
+			if (!cur) { //Fast parsing failed.
+				string data = Stdio.read_file(fn) + "\n";
+				if (fn == "DOM_Spain_Missions.txt") data += "}\n"; //HACK: As of 20230419, this file is missing a final close brace.
+				cur = parse_eu4txt(data) || ([]);
+			}
 			if (key) cur = cur[key] || ([]);
 			ret += ({cur});
 		}
