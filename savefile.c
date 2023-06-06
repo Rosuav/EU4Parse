@@ -158,10 +158,10 @@ int main(int argc, const char *argv[]) {
 	if (remaining > 6 && !strncmp(next, "EU4txt", 6)) {remaining += 6; next += 6;}
 	int ret = yyparse();
 	if (!ret) {
-		FILE *fp = fopen("savefile.json", "w");
+		FILE *fp = stdout;
+		if (argc > 2) fp = fopen(argv[2], "w");
 		output_json(fp, (union YYSTYPE *)savefile_result);
-		fclose(fp);
-		printf("Saved to file.\n");
+		if (fp != stdout) fclose(fp);
 	}
 	else {
 		int shoe = (char *)data - next, cap = remaining;
@@ -175,7 +175,7 @@ int main(int argc, const char *argv[]) {
 		printf("^\n");
 	}
 	if (size) munmap((void *)data, size); //Don't unmap until output_json is done as strings are referenced directly from the mmap
-	return 0;
+	return ret;
 }
 
 void yyerror(const char *error) {
