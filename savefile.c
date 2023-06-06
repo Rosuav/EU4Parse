@@ -13,7 +13,7 @@ union YYSTYPE;
 
 //Linked list structures for subsequent JSON encoding
 struct String {
-	char sig; //'S'
+	char sig; //'S' or 's'
 	const char *start;
 	size_t length;
 };
@@ -24,7 +24,7 @@ struct Map {
 	struct Map *next;
 };
 struct Array {
-	char sig; //'A'
+	char sig; //'A' or 'a'
 	union YYSTYPE *value;
 	struct Array *next;
 };
@@ -48,6 +48,35 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value) {
 }
 
 struct Map *make_map(struct Map *next, struct String *key, union YYSTYPE *value) {
+	//If next is non-null, we're adding an entry to an existing map. This is usually
+	//not a problem, and it simply means attaching ourselves to the head of the linked
+	//list, but the EU4 format sometimes creates arrays by multiple assignment. So we
+	//have to scan the map for any matching key. If we find one, is the value already an
+	//automatic array? (Note that "is the value an array" is not sufficient here.) If
+	//so, append ourselves to it (which means becoming the head of the LL - the lists
+	//in memory are actually stored backwards for efficiency). But if it's NOT, we
+	//have to replace it with an array of two elements. This is the only situation in
+	//which these constructor functions will ever mutate existing data.
+	if (next) {
+		struct Map *cur = next;
+		while (cur) {
+			if (key->length == cur->key->length && !strncmp(key->start, cur->key->start, key->length)) {
+				//Matching key.
+				struct Array *aa = (struct Array *)cur->value;
+				if (aa->sig != 'a') {
+					//It's not an autoarray. Make one.
+					aa = make_array(NULL, cur->value);
+					//aa->sig = 'a'; //No point flagging the first element, although it would be more logical to.
+				}
+				aa = make_array(aa, value);
+				aa->sig = 'a'; //Carry autoarrayness onto the new head
+				cur->value = (union YYSTYPE *)aa;
+				return next; //The overall map doesn't change head, we just mutated deep inside it
+			}
+			cur = cur->next;
+		}
+		//Not found? Make this the new head.
+	}
 	struct Map *ret = malloc(sizeof (struct Map));
 	if (!ret) return ret;
 	ret->sig = 'M';
@@ -122,7 +151,7 @@ void output_json(FILE *fp, union YYSTYPE *value) {
 			output_json_mapping(fp, (struct Map *)value, 0);
 			fputc('}', fp);
 			break;
-		case 'A':
+		case 'A': case 'a':
 			fputc('[', fp);
 			output_json_array(fp, (struct Array *)value);
 			fputc(']', fp);
