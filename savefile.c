@@ -98,7 +98,7 @@ void output_json_string(FILE *fp, struct String *str) {
 	//fwrite(str->start, 1, str->length, fp);
 	const unsigned char *stop = str->start + str->length;
 	for (const unsigned char *ch = str->start; ch < stop; ++ch) {
-		if (*ch < 128) fputc(*ch, fp);
+		if (*ch >= ' ' && *ch < 128) fputc(*ch, fp);
 		else fprintf(fp, "\\u%04x", *ch);
 	}
 	if (quoted) fputc('"', fp);
@@ -192,7 +192,8 @@ int main(int argc, const char *argv[]) {
 		if (argc > 2) fp = fopen(argv[2], "w");
 		int hash = argc > 3 && !strcmp(argv[3], "--hash");
 		if (hash) fprintf(fp, "{\"data\":");
-		output_json(fp, (union YYSTYPE *)savefile_result);
+		if (savefile_result) output_json(fp, (union YYSTYPE *)savefile_result);
+		else fputs("{}", fp); //No output? Output an empty object.
 		if (hash) fprintf(fp, ",\"hash\":\"\"}"); //Note that we don't ACTUALLY hash it, we just leave a stub.
 		if (fp != stdout) fclose(fp);
 	}

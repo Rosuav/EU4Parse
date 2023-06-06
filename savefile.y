@@ -33,6 +33,10 @@ struct Array *make_array(struct Array *next, union YYSTYPE *value);
 %%
 
 savefile: varlist {savefile_result = $1;};
+/* A savefile can be empty (even though a varlist can't).
+This will often cause problems, but parse_config_dir is okay
+with it, since this can be used for all-comment examples. */
+savefile: {savefile_result = NULL;};
 
 /* Note that a varlist can't be empty */
 varlist: name '=' value {$$ = make_map(NULL, $1, $3);};
