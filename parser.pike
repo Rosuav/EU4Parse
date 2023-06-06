@@ -735,11 +735,6 @@ mapping parse_savefile(string data, string|void filename) {
 	if (cache->hash == hexhash) return cache->data;
 	mapping ret = parse_savefile_string(data, filename);
 	if (!ret) return 0; //Probably an Ironman save (binary format, can't be parsed by this system).
-	foreach (ret->countries; string tag; mapping c) {
-		c->tag = tag; //When looking at a country, it's often convenient to know its tag (reverse linkage).
-		c->owned_provinces = Array.arrayify(c->owned_provinces); //Several things will crash if you don't have a provinces array
-	}
-	foreach (ret->provinces; string id; mapping prov) prov->id = -(int)id;
 	Stdio.write_file("eu4_parse.json", string_to_utf8(Standards.JSON.encode((["hash": hexhash, "data": ret]))));
 	return ret;
 }
@@ -787,6 +782,11 @@ void parser_pipe_msg(object pipe, string msg) {
 			write("\nCurrent date: %s\n", data->date);
 			array mods = (data->mods_enabled_names||({}))->filename;
 			if (mods * "," != G->CFG->active_mods) G->CFG = GameConfig(mods);
+			foreach (data->countries; string tag; mapping c) {
+				c->tag = tag; //When looking at a country, it's often convenient to know its tag (reverse linkage).
+				c->owned_provinces = Array.arrayify(c->owned_provinces); //Several things will crash if you don't have a provinces array
+			}
+			foreach (data->provinces; string id; mapping prov) prov->id = -(int)id;
 			G->G->provincecycle = ([]);
 			G->G->last_parsed_savefile = data;
 			parsing = -1; G->G->connection->send_updates_all();
