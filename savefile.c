@@ -76,15 +76,29 @@ void output_json_string(FILE *fp, struct String *str) {
 	free(str);
 }
 
-void output_json_mapping(FILE *fp, struct Map *map) {
+int output_json_mapping(FILE *fp, struct Map *map, int add_index) {
+	//Special case: Retain _index entries for the countries.
+	int want_order = map->key->length == 9 && !strncmp(map->key->start, "countries", 9) && ((struct Map *)map->value)->sig == 'M';
 	if (map->next) {
-		output_json_mapping(fp, map->next);
+		add_index += output_json_mapping(fp, map->next, add_index);
 		fputc(',', fp);
 	}
 	output_json_string(fp, map->key);
 	fputc(':', fp);
-	output_json(fp, map->value);
+	if (want_order) {
+		fputc('{', fp);
+		output_json_mapping(fp, (struct Map *)map->value, 1);
+		fputc('}', fp);
+	}
+	else if (add_index && ((struct Map *)map->value)->sig == 'M') {
+		fputc('{', fp);
+		fprintf(fp, "\"_index\":%d,", add_index - 1); //Record zero-based indices
+		output_json_mapping(fp, (struct Map *)map->value, 0);
+		fputc('}', fp);
+	}
+	else output_json(fp, map->value);
 	free(map);
+	return add_index;
 }
 
 void output_json_array(FILE *fp, struct Array *arr) {
@@ -105,7 +119,7 @@ void output_json(FILE *fp, union YYSTYPE *value) {
 	switch (((struct Array *)value)->sig) {
 		case 'M':
 			fputc('{', fp);
-			output_json_mapping(fp, (struct Map *)value);
+			output_json_mapping(fp, (struct Map *)value, 0);
 			fputc('}', fp);
 			break;
 		case 'A':
