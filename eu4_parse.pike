@@ -45,6 +45,14 @@ int main(int argc, array(string) argv) {
 	bootstrap("parser");
 	CFG = G->parser->NullGameConfig();
 
+	if (argc > 2 && argv[1] == "--parse") {
+		string raw = Stdio.read_file(argv[2]);
+		mapping data = G->parser->parse_eu4txt(raw);
+		if (!data) exit(0, "Parse unsuccessful (see above).\n");
+		string json = Standards.JSON.encode(data);
+		write("Parse successful. Indices: %O\n", indices(data));
+		return 0;
+	}
 	if (argc > 1 && argv[1] == "--parse") return G->parser->main();
 	if (argc > 1 && argv[1] == "--timeparse") {
 		string fn = argc > 2 ? argv[2] : "mp_autosave.eu4";
