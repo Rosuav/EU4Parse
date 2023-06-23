@@ -100,7 +100,7 @@ int yylex(void) {
 				//Scan for any sequence of atom characters. Yes, this DOES include starting
 				//with a digit. This will handle numbers, but also "25_permanent_power_projection".
 				while ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-					|| c == '_' || c == '\'' || c == ':' || c > 128
+					|| c == '_' || c == '\'' || c == ':' || c == '@' || c > 128
 					|| c == '.' || c == '-' || (c >= '0' && c <= '9'))
 						c = readchar();
 				if (next > start + 1) {

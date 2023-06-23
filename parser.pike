@@ -95,12 +95,12 @@ mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|vo
 			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
 			return ({"string", digits[0]});
 		}
-		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:]")) { //Include non-ASCII characters as letters
+		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:@]")) { //Include non-ASCII characters as letters
 			word = word[0];
 			//Unquoted tokens like institution_events.2 should be atoms, not atom-followed-by-number
 			if (array dotnumber = data->sscanf(".%[0-9]")) word += "." + dotnumber[0];
 			//Hyphenated mapping keys like maidan-e_naqsh-e_jahan should also be atoms.
-			while (array hyphenated = data->sscanf("-%[0-9a-zA-Z_'\x81-\xFF:]"))
+			while (array hyphenated = data->sscanf("-%[0-9a-zA-Z_'\x81-\xFF:@]"))
 				word += "-" + hyphenated[0];
 			if ((<"yes", "no">)[word]) return ({"boolean", word == "yes"});
 			//Hack: this one element seems to omit the equals sign for some reason.
