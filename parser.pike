@@ -242,7 +242,8 @@ class GameConfig {
 		foreach (filenames, string fn) {
 			mapping cur;
 			//TODO: Know which ones are never going to work and skip the C attempt
-			catch {cur = Standards.JSON.decode(Process.run(({"./savefile", fn}))->stdout);};
+			//Currently also skipping any for which we need indices
+			if (!retain_map_indices) catch {cur = Standards.JSON.decode(Process.run(({"./savefile", fn}))->stdout);};
 			if (!cur) { //Fast parsing failed.
 				string data = Stdio.read_file(fn) + "\n";
 				if (fn == "DOM_Spain_Missions.txt") data += "}\n"; //HACK: As of 20230419, this file is missing a final close brace.
