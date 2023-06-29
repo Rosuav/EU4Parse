@@ -1545,9 +1545,12 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	foreach (Array.arrayify(country->subjects), string|mapping stag) {
 		mapping subj = data->countries[stag];
 		mapping dep = subjects[tag + stag] || ([]);
+		array relations = ({ });
 		int impr = 0;
-		foreach (Array.arrayify(subj->active_relations[tag]->?opinion), mapping opine)
+		foreach (Array.arrayify(subj->active_relations[tag]->?opinion), mapping opine) {
 			if (opine->modifier == "improved_relation") impr = threeplace(opine->current_opinion);
+			relations += ({opine | G->CFG->opinion_modifiers[opine->modifier] | (["name": L10N(opine->modifier)])});
+		}
 		int integ = integration[dep->subject_type];
 		string integration_date = "n/a";
 		int can_integrate = 0;
@@ -1562,6 +1565,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"tag": stag,
 			"type": dep->subject_type ? L10N(dep->subject_type + "_title") : "(unknown)",
 			"improved": impr,
+			"relations": relations,
 			"liberty_desire": subj->cached_liberty_desire, //How accurate is this?
 			"start_date": dep->start_date, "integration_date": integration_date,
 			"can_integrate": can_integrate,

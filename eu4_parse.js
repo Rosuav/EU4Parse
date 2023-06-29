@@ -540,7 +540,20 @@ section("subjects", "Subjects", "Subject nations", state => [
 			TD(COUNTRY(subj.tag)),
 			TD(subj.type),
 			TD(subj.liberty_desire),
-			TD(country_info[subj.tag].opinion_theirs),
+			TD(DETAILS({style: "margin: 0"}, [
+				SUMMARY(country_info[subj.tag].opinion_theirs),
+				sortable({id: "subj_relations_" + subj.tag, border: "1"},
+					["Reason", "Effect", "Per year", "Expiration"],
+					subj.relations.map(rel => TR([
+						TD(rel.name),
+						TD(rel.current_opinion),
+						TD(rel.yearly_decay),
+						//I do not understand what "expiry_date" means. It seems to be boolean,
+						//with false meaning "has an expiry date". Yes - False means that. ??????
+						TD(rel.expiry_date ? "" : rel.date),
+					])),
+				),
+			])),
 			TD(Math.floor(subj.improved / 1000) + ""),
 			TD(subj.start_date),
 			TD({class: subj.can_integrate ? "interesting1" : ""}, subj.integration_date),
