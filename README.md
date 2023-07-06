@@ -16,3 +16,13 @@ port is 8087 but this can be changed. A TELNET interface is also
 available if desired.
 
 TODO: Document the key sender and consequent "go to province" feature.
+
+TODO: Add an alert to recommend Strong Duchies if you don't have it, have 2+ march/vassal/PU, and either have >50% LD or over slots
+TODO: Don't recommend seizing land if <80 and 100%
+TODO: If annexing a subject, replace its date with progress (X/Y) and maybe rate (Z/month)
+TODO: Alert if idle colonist
+TODO: War progress.
+- "Army strength" is defined as sum(unit.men * unit.morale for army in country for unit in army) + country.max_morale * country.manpower
+- Plot each country's army strength in the table with a graph showing its change from one save to the next
+- Graph the progression of the war as the sum of each side's army strengths
+- Is it possible to show history of battles and how they affected war strength? At very least, show every save sighted.
