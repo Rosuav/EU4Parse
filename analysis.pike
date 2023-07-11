@@ -1417,6 +1417,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			"wet": G->CFG->terrain_definitions->categories[G->CFG->province_info[id - "-"]->?terrain]->?is_water,
 			"terrain": G->CFG->province_info[id - "-"]->?terrain,
 			"climate": G->CFG->province_info[id - "-"]->?climate,
+			"has_port": G->CFG->province_info[id - "-"]->?has_port,
 			//"raw": prov,
 		])});
 	};

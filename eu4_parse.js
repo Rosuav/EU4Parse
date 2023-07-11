@@ -254,8 +254,14 @@ section("cot", "CoTs", "Centers of Trade", state => {
 		content.push(TABLE({id: kwd, border: "1"}, [
 			TR(TH({colSpan: 5}, [proventer(kwd), `${kwd[0].toUpperCase()}${kwd.slice(1)} CoTs:`])),
 			cots.map(cot => TR({className: "interesting" + cot.interesting}, [
-				TD(PROV(cot.id, cot.name)), TD(cot.tradenode), TD("Lvl "+cot.level),
-				TD("Dev "+cot.dev), TD(cot.noupgrade)
+				TD(PROV(cot.id, cot.name)),
+				TD([
+					province_info[cot.id].has_port
+						? SPAN({title: "Coastal COT"}, "🏖️")
+						: SPAN({title: "Inland COT"}, "🏜️"),
+					" ", cot.tradenode
+				]),
+				TD("Lvl "+cot.level), TD("Dev "+cot.dev), TD(cot.noupgrade)
 			])),
 		]));
 		provleave();
