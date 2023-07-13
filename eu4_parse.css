@@ -172,6 +172,7 @@ color choice can be overridden based on its parent. */
 .tech.below {background: #efe;}
 
 #recent_peace_treaties li {
+	list-style-type: none;
 	color: white;
 	background: black;
 	margin: 0.5em 1em 0.5em 0;
