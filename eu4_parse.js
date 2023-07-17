@@ -820,7 +820,7 @@ export function render(state) {
 		BUTTON({id: "customnations"}, "Custom nations"),
 		//Always have DETAILS/SUMMARY nodes for every expandable, such that,
 		//whenever content is updated, they remain in their open/closed state.
-	]);
+	]) && window.onresize();
 
 	if (state.error) {
 		replace_content("#error", [state.error, state.parsing > -1 ? state.parsing + "%" : ""]).classList.remove("hidden");
@@ -1223,10 +1223,16 @@ export function sockmsg_savecustom(msg) {
 }
 
 on("click", "#togglesidebar", e => {
-	const sidebar = DOM("nav#sidebar");
-	if (sidebar) sidebar.classList.toggle("vis");
-	e.match.parentElement.classList.toggle("sbvis");
+	DOM("nav#sidebar").classList.toggle("vis");
+	DOM("#togglesidebarbox").classList.toggle("sbvis");
+	window.onresize = null; //No longer automatically toggle as the window resizes.
 });
+//On wide windows, default to having the sidebar visible.
+window.onresize = () => {
+	const sbvis = window.innerWidth > 600;
+	DOM("nav#sidebar").classList.toggle("vis", sbvis);
+	DOM("#togglesidebarbox").classList.toggle("sbvis", sbvis);
+}
 
 on("click", "#sidebar ul a, a.tiledviewtile", e => {
 	e.preventDefault();
