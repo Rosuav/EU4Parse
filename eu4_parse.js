@@ -809,7 +809,12 @@ export function render(state) {
 		]),
 		sections.map(s => DETAILS({id: s.id}, SUMMARY(s.lbl))),
 		DIV({id: "options"}, [ //Positioned fixed in the top corner
-			LABEL(["Building highlight: ", SELECT({id: "highlight_options"}, OPTGROUP({label: "Building highlight"}))]),
+			BUTTON({id: "optexpand", title: "Show options and notifications"}, "🖈"),
+			LABEL([
+				"Building highlight: ",
+				SELECT({id: "highlight_options"}, OPTGROUP({label: "Building highlight"})),
+				SPAN({id: "spacer"}),
+			]),
 			DIV({id: "cyclegroup"}),
 			UL({id: "interesting_details"}),
 			UL({id: "notifications"}),
@@ -1225,15 +1230,18 @@ export function sockmsg_savecustom(msg) {
 on("click", "#togglesidebar", e => {
 	DOM("nav#sidebar").classList.toggle("vis");
 	DOM("#togglesidebarbox").classList.toggle("sbvis");
-	DOM("#options").classList.toggle("sbvis");
 	window.onresize = null; //No longer automatically toggle as the window resizes.
+});
+on("click", "#optexpand", e => {
+	DOM("#options").classList.toggle("vis");
+	window.onresize = null; //Note that manually toggling either will stop both from autotoggling. Is this correct?
 });
 //On wide windows, default to having the sidebar visible.
 window.onresize = () => {
 	const sbvis = window.innerWidth > 600;
 	DOM("nav#sidebar").classList.toggle("vis", sbvis);
 	DOM("#togglesidebarbox").classList.toggle("sbvis", sbvis);
-	DOM("#options").classList.toggle("sbvis", sbvis);
+	DOM("#options").classList.toggle("vis", sbvis);
 }
 
 on("click", "#sidebar ul a, a.tiledviewtile", e => {

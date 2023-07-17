@@ -88,11 +88,27 @@ color choice can be overridden based on its parent. */
 #options {
 	position: absolute;
 	top: 0.25em; right: 0.25em;
-	border: 1px solid black;
 	background: #ffeeff;
 	padding: 0 0.5em;
 }
-#options.sbvis {position: fixed;}
+#options.vis {
+	position: fixed;
+	border: 1px solid black;
+}
+#options:not(.vis) > * {display: none;}
+#options > #optexpand {
+	display: block;
+	padding: 0;
+	position: absolute;
+	right: 0; top: 0;
+	width: 1.5em; height: 1.5em;
+	line-height: 1;
+}
+/* Reserve space for #optexpand */
+#spacer {
+	display: inline-block;
+	width: 1em;
+}
 
 .province, .country {
 	display: inline-block;
