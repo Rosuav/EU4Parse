@@ -86,12 +86,13 @@ color choice can be overridden based on its parent. */
 }
 
 #options {
-	position: fixed;
+	position: absolute;
 	top: 0.25em; right: 0.25em;
 	border: 1px solid black;
 	background: #ffeeff;
 	padding: 0 0.5em;
 }
+#options.sbvis {position: fixed;}
 
 .province, .country {
 	display: inline-block;
@@ -302,12 +303,13 @@ nav#sidebar.vis {
 }
 #togglesidebarbox {
 	display: block;
-	position: fixed;
+	position: absolute;
 	left: 0; top: 0;
 	width: 100px; height: 48px;
 	padding: 8px;
 }
 #togglesidebarbox.sbvis {
+	position: fixed;
 	background-color: #a0f0c0;
 }
 

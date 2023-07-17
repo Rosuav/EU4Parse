@@ -1225,6 +1225,7 @@ export function sockmsg_savecustom(msg) {
 on("click", "#togglesidebar", e => {
 	DOM("nav#sidebar").classList.toggle("vis");
 	DOM("#togglesidebarbox").classList.toggle("sbvis");
+	DOM("#options").classList.toggle("sbvis");
 	window.onresize = null; //No longer automatically toggle as the window resizes.
 });
 //On wide windows, default to having the sidebar visible.
@@ -1232,6 +1233,7 @@ window.onresize = () => {
 	const sbvis = window.innerWidth > 600;
 	DOM("nav#sidebar").classList.toggle("vis", sbvis);
 	DOM("#togglesidebarbox").classList.toggle("sbvis", sbvis);
+	DOM("#options").classList.toggle("sbvis", sbvis);
 }
 
 on("click", "#sidebar ul a, a.tiledviewtile", e => {
