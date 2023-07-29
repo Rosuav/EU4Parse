@@ -186,14 +186,21 @@ function update_hover_country(tag) {
 //for a few seconds or indefinitely if you hover over the expanded info box.
 let hovertimeout = 0;
 on("mouseover", ".country:not(#hovercountry .country)", e => {
+	e.match.classList.add("retained");
 	clearTimeout(hovertimeout);
 	if (e.match.dataset.tag !== countrytag) update_hover_country(e.match.dataset.tag);
 });
 on("click", "#hovercountry .country", e => update_hover_country(e.match.dataset.tag));
 //The hovered country can be removed with its little Close button.
 on("click", "#hovercountry .close", e => update_hover_country(""));
-on("mouseover", "#hovercountry", e => clearTimeout(hovertimeout));
-on("mouseout", ".country:not(#hovercountry .country)", e => hovertimeout = setTimeout(update_hover_country, 5000, ""));
+on("mouseover", "#hovercountry", e => {
+	e.match.classList.add("retained");
+	clearTimeout(hovertimeout);
+});
+on("mouseout", ".country:not(#hovercountry .country)", e => {
+	DOM("#hovercountry").classList.remove("retained");
+	hovertimeout = setTimeout(update_hover_country, 5000, "");
+});
 
 on("click", ".goto-province", e => {
 	ws_sync.send({cmd: "goto", tag: countrytag, province: e.match.dataset.provid});

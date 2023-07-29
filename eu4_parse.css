@@ -164,10 +164,13 @@ color choice can be overridden based on its parent. */
 }
 #hovercountry {
 	margin: 0.5em;
-	border: 1px solid black;
+	border: 3px double black;
 	padding: 0.5em;
 	position: relative;
 	max-width: 251px;
+}
+#hovercountry.retained {
+	border: 3px inset black;
 }
 #hovercountry li {
 	padding-left: 1em; /* Indent wrapped lines */
