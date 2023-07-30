@@ -29,6 +29,10 @@ document.body.appendChild(replace_content(null, DIALOG({id: "tiledviewdlg"}, SEC
 	HEADER([H3("Jump to section"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
 	DIV({id: "tiledviewmain"}),
 ]))));
+document.body.appendChild(replace_content(null, DIALOG({id: "relationsdlg"}, SECTION([
+	HEADER([H3("Detailed relations breakdown"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
+	DIV({id: "relationsmain"}),
+]))));
 fix_dialogs({close_selector: ".dialog_cancel,.dialog_close", click_outside: "formless"});
 
 function cmp(a, b) {return a < b ? -1 : a > b ? 1 : 0;}
@@ -553,20 +557,10 @@ section("subjects", "Subjects", "Subject nations", state => [
 			TD(COUNTRY(subj.tag)),
 			TD(subj.type),
 			TD(subj.liberty_desire),
-			TD(DETAILS({style: "margin: 0"}, [
-				SUMMARY(country_info[subj.tag].opinion_theirs),
-				sortable({id: "subj_relations_" + subj.tag, border: "1"},
-					["Reason", "Effect", "Per year", "Expiration"],
-					subj.relations.map(rel => TR([
-						TD(rel.name),
-						TD(rel.current_opinion),
-						TD(rel.yearly_decay),
-						//I do not understand what "expiry_date" means. It seems to be boolean,
-						//with false meaning "has an expiry date". Yes - False means that. ??????
-						TD(rel.expiry_date ? "" : rel.date),
-					])),
-				),
-			])),
+			TD([
+				country_info[subj.tag].opinion_theirs,
+				BUTTON({class: "show_relations", "data-tag": subj.tag}, "🔍"),
+			]),
 			TD(Math.floor(subj.improved / 1000) + ""),
 			TD(subj.start_date),
 			TD({class: subj.can_integrate ? "interesting1" : ""}, subj.integration_date),
@@ -959,6 +953,29 @@ on("click", ".sorthead", e => {
 	if (sort_selections[id] === idx) sort_selections[id] = "-" + idx; //Note that "-0" is distinct from "0", as they're stored as strings
 	else sort_selections[id] = idx;
 	sortable(...tb._sortable_config);
+});
+
+//TODO: Generalize this Relations thing so you can get it for any country
+on("click", ".show_relations", e => {
+	const tag = e.match.closest("[data-tag]").dataset.tag;
+	console.log(country_info[tag]);
+	replace_content("#relationsmain", [
+		P(["Relations with ", COUNTRY(tag), " ",
+			B({title: "Their opinion of you"}, country_info[tag].opinion_theirs),
+			" / ", B({title: "Your opinion of them"}, country_info[tag].opinion_yours)]),
+		sortable({id: "relations_detail", border: "1"},
+			["Reason", "Effect", "Per year", "Expiration"],
+			country_info[tag].relations.map(rel => TR([
+				TD(rel.name),
+				TD(rel.current_opinion),
+				TD(rel.yearly_decay),
+				//I do not understand what "expiry_date" means. It seems to be boolean,
+				//with false meaning "has an expiry date". Yes - False means that. ??????
+				TD(rel.expiry_date ? "" : rel.date),
+			])),
+		),
+	]);
+	DOM("#relationsdlg").showModal();
 });
 
 let custom_nations = { }, custom_ideas = [], map_colors = [];

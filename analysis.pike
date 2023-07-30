@@ -1562,11 +1562,11 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			if (sprintf("%4d.%02d.%02d", y + integ, m, d) <= sprintf("%4d.%02d.%02d", yy, mm, dd))
 				can_integrate = 1;
 		}
+		write->countries[stag]->relations = relations; //TODO: Provide this for all countries, not just subjects
 		write->subjects += ({([
 			"tag": stag,
 			"type": dep->subject_type ? L10N(dep->subject_type + "_title") : "(unknown)",
 			"improved": impr,
-			"relations": relations,
 			"liberty_desire": subj->cached_liberty_desire, //How accurate is this?
 			"start_date": dep->start_date, "integration_date": integration_date,
 			"can_integrate": can_integrate,
