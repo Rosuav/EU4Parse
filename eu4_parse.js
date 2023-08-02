@@ -872,7 +872,8 @@ export function render(state) {
 		if (focus) input.focus();
 	}
 	if (typeof state.parsing === "number") {
-		if (state.parsing > -1) replace_content("#now_parsing", "Parsing savefile... " + state.parsing + "%").classList.remove("hidden");
+		if (state.parsing > 0) replace_content("#now_parsing", "Parsing savefile... " + state.parsing + "%").classList.remove("hidden");
+		else if (state.parsing > -1) replace_content("#now_parsing", "Parsing savefile...").classList.remove("hidden");
 		else replace_content("#now_parsing", "").classList.add("hidden");
 	}
 	if (state.menu) {
