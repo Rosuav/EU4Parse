@@ -331,14 +331,31 @@ mapping get_state(string group) {
 				//(possibly including a capital name??). Should we pick one, or
 				//search all?
 				if (arrayp(tryme)) tryme = tryme[0];
-				string folded = lower_case(tryme); //TODO: Fold to ASCII for the search
-				int pos = search(folded, term);
+				string folded = lower_case(tryme);
+				//For searching purposes, it's convenient to allow "München" to match "munc".
+				string decomp = Unicode.normalize(folded, "NFKD");
+				decomp = replace(decomp, (string)enumerate(0x70, 1, 0x300) / 1, ""); //Remove combining diacritical marks
+				string sans_dia = Unicode.normalize(decomp, "NFC");
+				//So we now have three strings: the original, the lower-cased, and the no-diacriticals.
+				//It's quite likely that they're all the same length, but not guaranteed.
+				//So what do we do? We match against any of them.
+				int pos = -1; string morph;
+				foreach (({tryme, folded, sans_dia}), morph)
+					if ((pos = search(morph, term)) != -1) break;
 				if (pos == -1) continue;
+				//Converting "München" into "munchen" won't break the offset calculations, so
+				//pretend that "munc" matched "Münc" in the highlight. However, if the length
+				//has changed, show the lower-cased version. Note that this could give bizarre
+				//results if there are multiple characters that change length, such that the
+				//overall string happens to end up just as long as the original; this seems a
+				//rather unlikely possibility, so I won't worry about it for now. (It's just a
+				//display issue anyway.)
+				if (sizeof(morph) != sizeof(tryme)) tryme = morph;
 				int end = pos + sizeof(term);
 				string before = tryme[..pos-1], match = tryme[pos..end-1], after = tryme[end..];
 				if (lang != "") {before = prov->name + " (" + lang + ": " + before; after += ")";}
 				results += ({({(int)(id - "-"), before, match, after})});
-				order += ({folded}); //Is it better to sort by the folded or by the tryme?
+				order += ({morph}); //Is it better to sort by the folded or by the tryme?
 				break;
 			}
 			if (sizeof(results) >= 25) break;
