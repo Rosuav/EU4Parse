@@ -558,7 +558,7 @@ section("subjects", "Subjects", "Subject nations", state => [
 			TD(subj.type),
 			TD(subj.liberty_desire),
 			TD([
-				country_info[subj.tag].opinion_theirs,
+				SPAN({style: "display: inline-block; width: 1.75em"}, country_info[subj.tag].opinion_theirs),
 				BUTTON({class: "show_relations", "data-tag": subj.tag}, "🔍"),
 			]),
 			TD(Math.floor(subj.improved / 1000) + ""),
