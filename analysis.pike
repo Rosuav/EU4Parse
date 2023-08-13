@@ -522,6 +522,7 @@ void analyze_leviathans(mapping data, string name, string tag, mapping write) {
 }
 
 int count_building_slots(mapping data, string id) {
+	mapping prov = data->provinces["-" + id];
 	return (all_province_modifiers(data, (int)id)->allowed_num_of_buildings
 		+ all_country_modifiers(data, data->countries[prov->owner])->global_allowed_num_of_buildings
 	) / 1000; //round down - partial building slots from dev don't count
