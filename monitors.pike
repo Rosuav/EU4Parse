@@ -119,7 +119,7 @@ void watch_game_log(object inot) {
 				//and the name of the war. Should be possible to match on the date (beginning of line).
 				array info = parse_text_markers(line);
 				sendme->recent_peace_treaties = G->G->recent_peace_treaties = ({info}) + G->G->recent_peace_treaties;
-				write("\e[1mPEACE:\e[0m %s\n", string_to_utf8(render_text(info)));
+				//write("\e[1mPEACE:\e[0m %s\n", string_to_utf8(render_text(info)));
 			}
 			if (sscanf(line, "%d %s %d - %s is preparing to attack %s.",
 					int day, string mon, int year, string aggressor, string defender) && defender) {
