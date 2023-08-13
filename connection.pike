@@ -107,7 +107,7 @@ void persist_save() {Stdio.write_file("preferences.json", Standards.JSON.encode(
 
 void websocket_cmd_highlight(mapping conn, mapping data) {
 	mapping prefs = persist_path(conn->group);
-	if (!G->building_types[data->building]) m_delete(prefs, "highlight_interesting");
+	if (!G->CFG->building_types[data->building]) m_delete(prefs, "highlight_interesting");
 	else prefs->highlight_interesting = data->building;
 	persist_save(); update_group(conn->group);
 }
