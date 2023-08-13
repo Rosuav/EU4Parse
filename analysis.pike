@@ -323,6 +323,12 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 			_incorporate(data, modifiers, "HRE province (" + L10N(reform) + ")", G->CFG->imperial_reforms[reform]->?province);
 	}
 	_incorporate(data, modifiers, "Trade good: " + prov->trade_goods, G->CFG->trade_goods[prov->trade_goods]->?province);
+	//How do we know if it's a city or not? This should be applied only if it's a fully-developed province, not a colony.
+	_incorporate(data, modifiers, "City", G->CFG->static_modifiers->city);
+	if (prov->has_port) _incorporate(data, modifiers, "Port", G->CFG->static_modifiers->port);
+	int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
+	_incorporate(data, modifiers, "Development", G->CFG->static_modifiers->development, dev);
+	//TODO: in_state, in_capital_state, coastal, seat_in_parliament
 	return prov->all_province_modifiers = modifiers;
 }
 
@@ -516,16 +522,9 @@ void analyze_leviathans(mapping data, string name, string tag, mapping write) {
 }
 
 int count_building_slots(mapping data, string id) {
-	//Count building slots. Not perfect. Depends on the CoTs being provided accurately.
-	//Doesn't always give the terrain bonus.
-	int slots = 2 + G->CFG->building_slots[id]; //All cities get 2, plus possibly a bonus from terrain and/or a penalty from climate.
-	mapping prov = data->provinces["-" + id];
-	if (prov->buildings->?university) ++slots; //A university effectively doesn't consume a slot.
-	if (data->countries[prov->owner]->?area_has_level3[?G->CFG->prov_area[id]]) ++slots; //A level 3 CoT in the state adds a building slot
-	//TODO: Modifiers, incl event flags (see all_country_modifiers maybe?)
-	//Notably global_allowed_num_of_buildings
-	int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
-	return slots + dev / 10;
+	return (all_province_modifiers(data, (int)id)->allowed_num_of_buildings
+		+ all_country_modifiers(data, data->countries[prov->owner])->global_allowed_num_of_buildings
+	) / 1000; //round down - partial building slots from dev don't count
 }
 
 void analyze_furnace(mapping data, string name, string tag, mapping write) {
