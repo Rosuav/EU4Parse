@@ -219,8 +219,8 @@ class GameConfig {
 	string active_mods; //Comma-separated signature string of all active mods. Might need game version too?
 	string hash, vanilla_hash; //Not necessarily the same hash that the game uses, but derived from all the same files
 	array config_dirs;
-	mapping icons = ([]), textcolors = ([]);
-	mapping prov_area = ([]), map_areas = ([]), prov_colonial_region = ([]);
+	mapping icons = ([]), textcolors = ([]), map_areas = ([]);
+	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]);
 	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
 	mapping cot_definitions, state_edicts, terrain_definitions, imperial_reforms;
@@ -411,6 +411,12 @@ log = \"PROV-TERRAIN-END\"
 			//Discard any maparray mapping portions - they usually just specify the colour
 			if (objectp(provinces)) map_areas[areaname] = provinces->indexed;
 		}
+		foreach (low_parse_savefile("/map/region.txt"); string regname; mapping info) {
+			foreach (info->areas || ({ }), string area) area_region[area] = regname;
+		}
+		foreach (low_parse_savefile("/map/continent.txt"); string contname; array|mapping provinces) {
+			if (arrayp(provinces)) foreach (provinces, string id) prov_continent[id] = contname;
+		}
 		mapping colo_regions = parse_config_dir("/common/colonial_regions");
 		foreach (colo_regions; string regionname; mapping info)
 			foreach (info->provinces || ({ }), string prov) prov_colonial_region[prov] = regionname;
@@ -456,6 +462,7 @@ log = \"PROV-TERRAIN-END\"
 					case "trigger": case "free": case "category": case "ai_will_do":
 						break; //Ignore these attributes, they're not actual ideas
 					default:
+						idea->id = id;
 						idea->desc = grp + ": " + id;
 						basic_ideas += ({idea});
 						pos += ({idx});

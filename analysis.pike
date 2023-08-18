@@ -58,6 +58,18 @@ object calendar(string date) {
 	return Calendar.Gregorian.Day(year, mon, day);
 }
 
+//Resolve a relative tag name to the actual tag name. See https://eu4.paradoxwikis.com/Scopes for concepts and explanation.
+string resolve_scope_tag(mapping data, array(mapping) scopes, string tag) {
+	switch (tag) {
+		case "ROOT": return scopes[0]->tag;
+		case "FROM": return scopes[-2]->tag; //Not sure if this is right
+		case "PREV": return scopes[-2]->tag;
+		case "PREV_PREV": return scopes[-3]->tag;
+		case "THIS": return scopes[-1]->tag;
+		default: return tag;
+	}
+}
+
 //Pass the full data block, and for scopes, a sequence of country and/or province mappings.
 //Triggers are tested on scopes[-1], and PREV= will switch to scopes[-2].
 //What happens if you do "PREV = { PREV = { ... } }" ? Should we shorten the scopes array
@@ -65,11 +77,29 @@ object calendar(string date) {
 int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixed value) {
 	mapping scope = scopes[-1];
 	switch (type) {
-		case "AND":
-			foreach (value; string t; mixed v)
-				//Does this need to do the array check same as OR= does?
-				if (!trigger_matches(data, scopes, t, v)) return 0;
+		case "AND": {
+			//Inside an AND block (and possibly an OR??), you can have an "if/else" pair.
+			//An "if" block has a "limit", and if the limit is true, the rest of the "if"
+			//applies. Otherwise, the immediately-following "else" does.
+			//I'm assuming here that if/else pairs are correctly matched; if there are,
+			//say, three "if" blocks, I assume that if[1] corresponds to else[1].
+			//This would be WAY easier if the "else" were inside the "if".
+			//Note that I may have represented the logic here incorrectly. No idea how
+			//this is supposed to behave if you do OR = { if = { limit = {...} a = 1 b = 2 } else = { c = 3 d = 4 } }
+			//with multiple entries. Is that even possible?
+			if (value["if"]) {
+				array ifs = Array.arrayify(value["if"]), elses = Array.arrayify(value["else"]);
+				if (sizeof(ifs) != sizeof(elses)) return 0; //Borked.
+				foreach (ifs; int i; mapping blk) {
+					mapping useme = trigger_matches(data, scopes, "AND", blk->limit || ([])) ? blk : elses[i];
+					if (!trigger_matches(data, scopes, "AND", useme)) return 0;
+				}
+			}
+			foreach (value; string t; mixed vv)
+				foreach (Array.arrayify(vv), mixed v) //Would it be more efficient to arrayp check rather than arrayifying?
+					if (!trigger_matches(data, scopes, t, v)) return 0;
 			return 1;
+		}
 		case "OR":
 			foreach (value; string t; mixed vv)
 				foreach (Array.arrayify(vv), mixed v) //Would it be more efficient to arrayp check rather than arrayifying?
@@ -89,6 +119,9 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (int)scope->capital == (int)value;
 		case "capital_scope": //Check other details about the capital, by switching scope
 			return trigger_matches(data, scopes + ({data->provinces["-" + scope->capital]}), "AND", value);
+		case "overlord":
+			if (!scope->overlord) return 0;
+			return trigger_matches(data, scopes + ({data->countries[scope->overlord]}), "AND", value);
 		case "trade_income_percentage":
 			//Estimate trade income percentage based on last month's figures. I don't know
 			//whether the actual effect changes within the month, but this is likely to be
@@ -97,17 +130,68 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return threeplace(scope->ledger->lastmonthincometable[2]) * 1000 / threeplace(scope->ledger->lastmonthincome)
 				>= threeplace(value);
 		case "has_disaster": return 0; //TODO: Where are current disasters listed?
+		case "religion": return scope->religion == value;
 		case "religion_group":
 			//Calculated slightly backwards; instead of asking what religion group the
 			//country is in, and then seeing if that's equal to value, we look up the
 			//list of religions in the group specified, and ask if the country's is in
 			//that list.
 			return !undefinedp(G->CFG->religion_definitions[value][scope->religion]);
-		//case "dominant_religion": //TODO
+		case "dominant_religion": return scope->dominant_religion == value;
 		case "technology_group": return scope->technology_group == value;
+		case "primary_culture": return scope->primary_culture == value;
+		case "culture_group":
+			//Checked the same slightly-backwards way that religion group is.
+			return !undefinedp(G->CFG->culture_definitions[value][scope->primary_culture]);
 		case "has_country_modifier": case "has_ruler_modifier":
 			//Hack: I'm counting ruler modifiers the same way as country modifiers.
 			return has_value(Array.arrayify(scope->modifier)->modifier, value);
+		case "has_country_flag":
+			return !!scope->flags[value]; //Flags are mapped to the date when they happened. We just care about presence.
+		case "has_parliament":
+			return all_country_modifiers(data, scope)->has_parliament;
+		case "has_government_attribute": //Government attributes are thrown in with country modifiers for simplicity.
+			return all_country_modifiers(data, scope)[value];
+		case "has_estate":
+			return has_value(Array.arrayify(scope->estate)->type, value);
+		case "has_enabled_estate_action":
+			//This is actually a scripted trigger (managed by scripted effects) that uses
+			//country flags to store the info.
+			return !undefinedp(scope->flags["enable_estate_action_" + value->estate_action]);
+		case "has_estate_privilege":
+			foreach (Array.arrayify(scope->estate), mapping est) {
+				if (has_value(Array.arrayify(est->granted_privileges)[*][0], value)) return 1;
+			}
+			return 0;
+		case "has_idea": return has_value(enumerate_ideas(scope->active_idea_groups)->id, value);
+		case "has_idea_group": return !undefinedp(scope->active_idea_groups[value]);
+		case "adm_tech": case "dip_tech": case "mil_tech":
+			return (int)scope->technology[type] >= (int)value;
+		case "uses_piety":
+			return all_country_modifiers(data, scope)->uses_piety;
+		//What's the proper way to recognize colonial nations?
+		//One of these is almost certainly wrong. Do they both need a condition (has/hasn't an overlord)?
+		//Should they be identified by governmental forms?
+		case "is_colonial_nation":
+			return (scope->tag[0] == 'C' && !sizeof((multiset)(array)scope->tag[1..] - (multiset)(array)"012345789")) == value;
+		case "is_former_colonial_nation":
+			return (scope->tag[0] == 'C' && !sizeof((multiset)(array)scope->tag[1..] - (multiset)(array)"012345789")) == value;
+		case "is_revolutionary": return all_country_modifiers(data, scope)->revolutionary;
+		case "is_emperor": return (data->empire->emperor == scope->tag) == value;
+		case "num_of_cities": return (int)scope->num_of_cities >= (int)value;
+		case "owns": return has_value(scope->owned_provinces, value);
+		case "has_mission": {
+			foreach (Array.arrayify(scope->country_missions->?mission_slot), array slot) {
+				foreach (Array.arrayify(slot), string kwd) {
+					if (G->CFG->country_missions[kwd][value]) return 1;
+				}
+			}
+			return 0;
+		}
+		//TODO: Handle all scripted triggers generically??
+		case "is_revolutionary_republic_trigger":
+			return has_value(scope->government->reform_stack->reforms, "revolutionary_republic_reform") ||
+				has_value(scope->government->reform_stack->reforms, "junior_revolutionary_republic_reform");
 		//Province scope.
 		case "development": {
 			int dev = (int)scope->base_tax + (int)scope->base_production + (int)scope->base_manpower;
@@ -115,10 +199,40 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		}
 		case "province_has_center_of_trade_of_level": return (int)scope->center_of_trade >= (int)value;
 		case "area": return G->CFG->prov_area[(string)scope->id] == value;
+		case "region": return G->CFG->area_region[G->CFG->prov_area[(string)scope->id]] == value;
+		case "colonial_region": return G->CFG->prov_colonial_region[(string)scope->id] == value;
+		case "continent": return G->CFG->prov_continent[(string)scope->id] == value;
+		case "has_province_modifier": return all_province_modifiers(data, (int)scope->id)[value];
+		case "is_strongest_trade_power": {
+			//Assumes the province is a trade node
+			foreach (data->trade->node, mapping node) {
+				if (G->CFG->tradenode_definitions[node->definitions]->location != (string)scope->id) continue;
+				array top = Array.arrayify(node->top_power);
+				if (!sizeof(top)) return 0; //There's nobody trading in this node (yet), so nobody is the top trade power.
+				return resolve_scope_tag(data, scopes, value) == top[0];
+			}
+			return 1; //Trade node not found, probably should throw an error actually
+		}
 		//Possibly universal scope
 		case "has_dlc": return has_value(data->dlc_enabled, value);
 		case "has_global_flag": return !undefinedp(data->flags[value]);
-		default: return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
+		case "current_age": return data->current_age == value;
+		case "always": return value; //"always = no" blocks everything
+		//Minor point of confusion here. As well as "exists = SPA" to test whether Spain exists,
+		//the wiki also mentions "exists = yes" to test whether the current scope exists. But in
+		//other contexts where a new scope is selected (eg "overlord = { ... }"), they seem to
+		//implicitly check that one exists. So I'm not sure when it's possible to switch to a
+		//scope that doesn't exist, and what OTHER checks should do in that situation.
+		case "exists": {
+			//Note that a country might be present in the save file but without any provinces.
+			//This counts as not existing. If it were to be given a province, it would exist.
+			mapping target = data->countries[value];
+			return target && (int)target->num_of_cities;
+		}
+		default:
+			//Switching to a specific province is done by giving its (numeric) ID.
+			if ((int)type) return trigger_matches(data, scopes + ({data->provinces["-" + type]}), "AND", value);
+			return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
 	}
 	
 }
@@ -291,6 +405,23 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		adv = advisors[adv->id]; if (!adv) continue;
 		mapping type = G->CFG->advisor_definitions[adv->type];
 		_incorporate(data, country, modifiers, L10N(adv->type) + " (" + adv->name + ")", type);
+	}
+
+	//Your religion affects your country (whodathunk). Note that we also incorporate some other
+	//attributes here for convenience, even though they're not really country modifiers.
+	foreach (G->CFG->religion_definitions; string grpname; mapping group) {
+		mapping relig = group[country->religion];
+		if (!relig) continue; //Not this group. Moving on!
+		_incorporate(data, country, modifiers, L10N(country->religion), relig->country);
+		_incorporate(data, country, modifiers, L10N(country->religion), relig & (<
+			"uses_anglican_power", "uses_hussite_power", "uses_church_power", "has_patriarchs",
+			"fervor", "uses_piety", "uses_karma", "uses_isolationism", "uses_judaism_power",
+			"personal_deity", "fetishist_cult", "ancestors", "authority", "religious_reforms",
+			"doom", "declare_war_in_regency", "can_have_secondary_religion", "fetishist_cult",
+		>));
+		_incorporate(data, country, modifiers, L10N(grpname), group & (<"can_form_personal_unions">));
+		//What is relig->country_as_secondary used for? Syncretic?
+		//TODO: Also check Muslim schools for their attributes
 	}
 	return country->all_country_modifiers = modifiers;
 }
@@ -674,21 +805,6 @@ void analyze_findbuildings(mapping data, string name, string tag, mapping write,
 		])});
 	}
 	sort(write->highlight->provinces->cost[*][-1], write->highlight->provinces);
-}
-
-int(0..1) passes_filter(mapping country, mapping|array filter, int|void any) {
-	//If any is 1, then as soon as we find a true return, we propagate it.
-	//If any is 0 (ie we need all, the default), we propagate false instead.
-	//An empty block - or one containing only types we don't know - will
-	//pass an AND check (no restrictions, all fine), but fail an OR check.
-	foreach (filter; string kwd; mixed values) {
-		//There could be multiple of the same keyword (eg in an OR block, or multiple OR blocks). They're independent.
-		foreach (Array.arrayify(values), mixed value) switch (kwd) {
-			case "OR": if (passes_filter(country, value, 1) == any) return any;
-			default: break; //Unknown type, don't do anything
-		}
-	}
-	return !any;
 }
 
 mapping analyze_trade_node(mapping data, mapping trade_nodes, string tag, string node, mapping prefs) {
@@ -1352,7 +1468,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			//that have to be completed. I think that, if there are multiple
 			//mission chains in a slot, they are laid out vertically. In any case,
 			//we don't really care about layout, just which missions there are.
-			mapping mission = Array.arrayify(G->CFG->country_missions[kwd]);
+			mapping mission = G->CFG->country_missions[kwd];
 			foreach (mission; string id; mixed info) {
 				if (has_value(completed, id)) continue; //Already done this mission, don't highlight it.
 				string title = G->CFG->L10n[id + "_title"];
@@ -1403,10 +1519,10 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	      - ie ignore everything you or a non-tributary subject owns
 	    - others?
 	*/
+	multiset ignored = (multiset)Array.arrayify(country->ignore_decision);
 	foreach (G->CFG->country_decisions; string kwd; mapping info) {
-		//TODO.
-		if (!passes_filter(country, info->potential)) continue;
-		//werror("%s -> %s %O\n", tag, kwd, info->potential);
+		if (ignored[kwd]) continue; //The user has said to ignore it, so hide it from the list.
+		if (!trigger_matches(data, ({country}), "AND", info->potential)) continue;
 	}
 
 	//Get some info about provinces, for the sake of the province details view
