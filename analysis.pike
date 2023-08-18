@@ -213,6 +213,17 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			}
 			return 1; //Trade node not found, probably should throw an error actually
 		}
+		case "country_or_non_sovereign_subject_holds": {
+			string tag = resolve_scope_tag(data, scopes, value);
+			if (tag == scope->owner) return 1;
+			mapping owner = data->countries[tag];
+			//It's owned by someone else. Are they subject to you?
+			foreach (Array.arrayify(data->diplomacy->dependency), mapping dep)
+				if (dep->first == tag && dep->second == scope->owner)
+					//Hack: Assume the subject type ID is enough of a check
+					return dep->subject_type != "tributary_state";
+			return 0; //Guess not.
+		}
 		//Possibly universal scope
 		case "has_dlc": return has_value(data->dlc_enabled, value);
 		case "has_global_flag": return !undefinedp(data->flags[value]);
@@ -1061,26 +1072,59 @@ mapping ship_types = transform(
 //Step through a set of highlighting instructions and list the relevant provinces
 //Returns an array of provinces, with subgroups of provinces indicated with subarrays
 //starting with a heading. (Province IDs are all returned numerically.)
-array(int|array(string|int|array)) enumerate_highlight_provinces(mapping data, mapping country, mapping highlight) {
+array(int|array(string|int|array)) enumerate_highlight_provinces(mapping data, mapping country, mapping highlight, mapping|void filter) {
 	if (!highlight || !sizeof(highlight)) return ({ }); //Mission does not involve provinces, don't highlight it.
-	//Very simplistic filter handling.
-	array filters = ({ });
-	//TODO: Require that the province not be owned by you *or any non-trib subject*
-	if (highlight->NOT->?country_or_non_sovereign_subject_holds == "ROOT")
-		filters += ({ lambda(mapping p) {return p->controller != country->tag;} });
-	//Very simplistic search criteria.
-	array provs = Array.arrayify(highlight->province_id) + Array.arrayify(highlight->OR->?province_id);
-	array areas = Array.arrayify(highlight->area) + Array.arrayify(highlight->OR->?area);
+	if (!filter) filter = highlight;
+	//In theory, I think, this ought to be done by going through every possible province
+	//and seeing if it passes the filter. In practice, though, we'd rather check differently,
+	//so this recursively scans the highlight mapping for provinces and groups.
 	array interesting = ({ });
-	foreach (G->CFG->map_areas[areas[*]] + ({provs}), array|object area)
-		foreach (area;; string provid) {
-			mapping prov = data->provinces["-" + provid];
-			int keep = 1;
-			foreach (filters, function f) keep = keep && f(prov);
-			if (!keep) continue;
-			interesting += ({(int)provid});
+	foreach (highlight; string kwd; mixed value) {
+		switch (kwd) {
+			case "province_id":
+				foreach (Array.arrayify(value), int|string prov)
+					if (trigger_matches(data, ({country, data->provinces["-" + prov]}), "AND", filter))
+						interesting += ({(int)prov});
+				break;
+			case "area":
+				foreach (Array.arrayify(value), string area)
+					interesting += ({({
+						"Area: " + L10N(area),
+						enumerate_highlight_provinces(data, country, (["province_id": G->CFG->map_areas[area]]), filter),
+					})});
+				break;
+			case "region":
+				foreach (Array.arrayify(value), string reg) {
+					array prov = ({ });
+					foreach (Array.arrayify(G->CFG->map_regions[reg]->areas), string area) prov += G->CFG->map_areas[area];
+					interesting += ({({
+						"Region: " + L10N(reg),
+						enumerate_highlight_provinces(data, country, (["province_id": prov]), filter),
+					})});
+				}
+				break;
+			//The distinction between AND and OR isn't important here, although it will be for the
+			//checks inside trigger_matches() after we've listed provinces.
+			case "AND": case "OR":
+				interesting += enumerate_highlight_provinces(data, country, Array.arrayify(value)[*], filter); break;
+			//case "NOT": case "ROOT": case "root": break;
+			//default: werror("Unknown filter keyword: %O %O\n", kwd, value); //List unknowns if desired
 		}
-	return interesting;
+	}
+	//Post-process the list to remove anything uninteresting.
+	foreach (interesting; int i; mixed val)
+		if (arrayp(val)) switch (sizeof(val)) {
+			case 0: interesting[i] = 0; break; //Empty arrays are uninteresting.
+			case 1:
+				if (stringp(val[0])) interesting[i] = 0; //Arrays containing only a heading are uninteresting.
+				else interesting[i] = val[0]; //Arrays containing only one element can devolve to that element.
+				break;
+			case 2:
+				if (stringp(val[0]) && arrayp(val[1]) && !sizeof(val[1])) interesting[i] = 0; //Just a heading and an empty array? Bo-ring.
+				break;
+			default: break; //Everything else is presumed interesting.
+		}
+	return interesting - ({0});
 }
 /*
 Need to show how many merchants (other than you) are transferring on this path.
@@ -1526,7 +1570,6 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	foreach (G->CFG->country_decisions; string kwd; mapping info) {
 		if (ignored[kwd]) continue; //The user has said to ignore it, so hide it from the list.
 		if (!trigger_matches(data, ({country}), "AND", info->potential)) continue;
-		continue; //below isn't working yet
 		array interesting = enumerate_highlight_provinces(data, country, info->provinces_to_highlight);
 		if (sizeof(interesting)) write->decisions_missions += ({([
 			"id": kwd,

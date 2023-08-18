@@ -246,11 +246,17 @@ function upgrade(upg, tot) {
 const sections = [];
 function section(id, nav, lbl, render) {sections.push({id, nav, lbl, render});}
 
+function province_list(prov) {
+	if (Array.isArray(prov)) return UL(prov.map(province_list));
+	if (typeof prov === "number") return LI(PROV(prov));
+	return LI(""+prov);
+}
+
 section("decisions_missions", "", "Decisions and Missions", state => [
 	SUMMARY(`Decisions and Missions [${state.decisions_missions.length}]`),
 	state.decisions_missions.map(mission => [
 		H3([proventer(mission.id), mission.name]),
-		UL(mission.provinces.map(p => typeof p === "number" && LI(PROV(p)))),
+		UL(mission.provinces.map(province_list)),
 		provleave(),
 	]),
 ]);

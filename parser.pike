@@ -219,7 +219,7 @@ class GameConfig {
 	string active_mods; //Comma-separated signature string of all active mods. Might need game version too?
 	string hash, vanilla_hash; //Not necessarily the same hash that the game uses, but derived from all the same files
 	array config_dirs;
-	mapping icons = ([]), textcolors = ([]), map_areas = ([]);
+	mapping icons = ([]), textcolors = ([]), map_areas = ([]), map_regions = ([]);
 	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]);
 	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
@@ -411,7 +411,8 @@ log = \"PROV-TERRAIN-END\"
 			//Discard any maparray mapping portions - they usually just specify the colour
 			if (objectp(provinces)) map_areas[areaname] = provinces->indexed;
 		}
-		foreach (low_parse_savefile("/map/region.txt"); string regname; mapping info) {
+		map_regions = low_parse_savefile("/map/region.txt");
+		foreach (map_regions; string regname; mapping info) {
 			foreach (info->areas || ({ }), string area) area_region[area] = regname;
 		}
 		foreach (low_parse_savefile("/map/continent.txt"); string contname; array|mapping provinces) {
