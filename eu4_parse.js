@@ -247,7 +247,10 @@ const sections = [];
 function section(id, nav, lbl, render) {sections.push({id, nav, lbl, render});}
 
 function province_list(prov) {
-	if (Array.isArray(prov)) return UL(prov.map(province_list));
+	if (Array.isArray(prov)) {
+		if (typeof prov[0] === "string") return LI([prov[0], UL(prov.slice(1).map(province_list))]);
+		return prov.map(province_list);
+	}
 	if (typeof prov === "number") return LI(PROV(prov));
 	return LI(""+prov);
 }

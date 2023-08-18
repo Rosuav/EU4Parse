@@ -106,6 +106,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 					if (trigger_matches(data, scopes, t, v)) return 1;
 			return 0;
 		case "NOT": return !trigger_matches(data, scopes, "OR", value);
+		case "root": return trigger_matches(data, scopes + ({scope}), "AND", value);
 		//Okay, now for the actual triggers. Country scope.
 		case "has_reform": return has_value(scope->government->reform_stack->reforms, value);
 		case "any_owned_province":
@@ -193,6 +194,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return has_value(scope->government->reform_stack->reforms, "revolutionary_republic_reform") ||
 				has_value(scope->government->reform_stack->reforms, "junior_revolutionary_republic_reform");
 		//Province scope.
+		case "province_id": return (int)scope->id == (int)value;
 		case "development": {
 			int dev = (int)scope->base_tax + (int)scope->base_production + (int)scope->base_manpower;
 			return dev >= (int)value;
@@ -213,6 +215,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			}
 			return 1; //Trade node not found, probably should throw an error actually
 		}
+		case "owned_by": return resolve_scope_tag(data, scopes, value) == scope->owner;
 		case "country_or_non_sovereign_subject_holds": {
 			string tag = resolve_scope_tag(data, scopes, value);
 			if (tag == scope->owner) return 1;
