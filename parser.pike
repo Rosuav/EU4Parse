@@ -810,11 +810,14 @@ void parser_pipe_msg(object pipe, string msg) {
 }
 
 void spawn() {
-	if (G->G->parser_pipe) parser_pipe = G->G->parser_pipe; else G->G->parser_pipe = parser_pipe; //TODO: Use @retain from StilleBot
 	object proc = Process.spawn_pike(({"eu4_parse.pike", "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
 	parser_pipe->set_nonblocking(parser_pipe_msg, 0, parser_pipe->close);
 	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
 	array(string) files = SAVE_PATH + "/" + get_dir(SAVE_PATH)[*];
 	sort(file_stat(files[*])->mtime, files);
 	if (sizeof(files)) process_savefile(files[-1]);
+}
+
+protected void create() {
+	if (G->G->parser_pipe) parser_pipe = G->G->parser_pipe; else G->G->parser_pipe = parser_pipe; //TODO: Use @retain from StilleBot
 }
