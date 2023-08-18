@@ -116,6 +116,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "province_has_center_of_trade_of_level": return (int)scope->center_of_trade >= (int)value;
 		case "area": return G->CFG->prov_area[(string)scope->id] == value;
 		//Possibly universal scope
+		case "has_dlc": return has_value(data->dlc_enabled, value);
 		case "has_global_flag": return !undefinedp(data->flags[value]);
 		default: return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
 	}
@@ -134,20 +135,20 @@ array(mapping) enumerate_ideas(mapping idea_groups) {
 }
 
 //Gather ALL a country's modifiers. Or, try to. Note that conditional modifiers aren't included.
-void _incorporate(mapping data, mapping modifiers, string source, mapping effect, int|void mul, int|void div) {
+void _incorporate(mapping data, mapping scope, mapping modifiers, string source, mapping effect, int|void mul, int|void div) {
 	if (effect) foreach (effect; string id; mixed val) {
-		if ((id == "modifier" || id == "modifiers") && mappingp(val)) _incorporate(data, modifiers, source, val, mul, div);
-		if (id == "conditional" && mappingp(val)) {
-			//Conditional attributes. We understand a very limited set of them here.
-			//If in doubt, incorporate them. That might be an unideal default though.
-			int ok = 1;
-			foreach (val->allow || ([]); string key; string val) switch (key) {
-				case "has_dlc": if (!has_value(data->dlc_enabled, val)) ok = 0; break;
-				default: break;
+		if ((id == "modifier" || id == "modifiers") && mappingp(val)) _incorporate(data, scope, modifiers, source, val, mul, div);
+		if (id == "conditional") {
+			//Conditional attributes. There may be multiple independent blocks; each
+			//one has its "allow" block and then some attributes. At least, I *think*
+			//they're independent; the way some of them are coded, it might be that
+			//only one can ever match. Not sure.
+			foreach (Array.arrayify(val), mixed cond) if (mappingp(cond)) {
+				if (trigger_matches(data, ({scope}), "AND", cond->allow || ([])))
+					_incorporate(data, scope, modifiers, source, cond, mul, div);
 			}
-			if (ok) _incorporate(data, modifiers, source, val, mul, div);
 		}
-		if (id == "custom_attributes") _incorporate(data, modifiers, source, val, mul, div); //Government reforms have some special modifiers. It's easiest to count them as country modifiers.
+		if (id == "custom_attributes") _incorporate(data, scope, modifiers, source, val, mul, div); //Government reforms have some special modifiers. It's easiest to count them as country modifiers.
 		int effect = 0;
 		if (stringp(val) && sscanf(val, "%[-]%d%*[.]%[0-9]%s", string sign, int whole, string frac, string blank) && blank == "")
 			modifiers[id] += effect = (sign == "-" ? -1 : 1) * (whole * 1000 + (int)sprintf("%.03s", frac + "000")) * (mul||1) / (div||1);
@@ -155,16 +156,16 @@ void _incorporate(mapping data, mapping modifiers, string source, mapping effect
 		if (effect) modifiers->_sources[id] += ({source + ": " + effect});
 	}
 }
-void _incorporate_all(mapping data, mapping modifiers, string source, mapping definitions, array keys, int|void mul, int|void div) {
+void _incorporate_all(mapping data, mapping scope, mapping modifiers, string source, mapping definitions, array keys, int|void mul, int|void div) {
 	foreach (Array.arrayify(keys), string key)
-		_incorporate(data, modifiers, sprintf("%s %O", source, L10N(key)), definitions[key], mul, div);
+		_incorporate(data, scope, modifiers, sprintf("%s %O", source, L10N(key)), definitions[key], mul, div);
 }
 mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (mapping cached = country->all_country_modifiers) return cached;
 	mapping modifiers = (["_sources": ([])]);
 	//Ideas are recorded by their groups and how many you've taken from that group.
 	array ideas = enumerate_ideas(country->active_idea_groups);
-	_incorporate(data, modifiers, ideas->desc[*], ideas[*]); //TODO: TEST ME
+	_incorporate(data, country, modifiers, ideas->desc[*], ideas[*]); //TODO: TEST ME
 	//NOTE: Custom nation ideas are not in an idea group as standard ideas are; instead
 	//you get a set of ten, identified by index, in country->custom_national_ideas, and
 	//it doesn't say which ones you have. I think the last three are the traditions and
@@ -191,28 +192,28 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		//a way to multiply the effects of things!
 		foreach (ideaids, mapping idea) {
 			mapping defn = G->CFG->custom_ideas[(int)idea->index];
-			_incorporate(data, modifiers, "Custom idea - " + L10N(defn->id), defn, (int)idea->level, 1);
+			_incorporate(data, country, modifiers, "Custom idea - " + L10N(defn->id), defn, (int)idea->level, 1);
 		}
 	}
-	_incorporate_all(data, modifiers, "Policy", G->CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
-	_incorporate_all(data, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
+	_incorporate_all(data, country, modifiers, "Policy", G->CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
+	_incorporate_all(data, country, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
 	array tradebonus = G->CFG->trade_goods[Array.arrayify(country->traded_bonus)[*]];
-	_incorporate(data, modifiers, ("Trading in " + tradebonus->id[*])[*], tradebonus[*]); //TODO: TEST ME
-	_incorporate_all(data, modifiers, "Modifier", G->CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
+	_incorporate(data, country, modifiers, ("Trading in " + tradebonus->id[*])[*], tradebonus[*]); //TODO: TEST ME
+	_incorporate_all(data, country, modifiers, "Modifier", G->CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
 	mapping age = G->CFG->age_definitions[data->current_age]->abilities;
-	_incorporate(data, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
+	_incorporate(data, country, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
 	mapping tech = country->technology || ([]);
 	sscanf(data->date, "%d.%d.%d", int year, int mon, int day);
 	foreach ("adm dip mil" / " ", string cat) {
 		int level = (int)tech[cat + "_tech"];
 		string desc = String.capitalize(cat) + " tech";
-		_incorporate_all(data, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level));
+		_incorporate_all(data, country, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level));
 		if ((int)G->CFG->tech_definitions[cat]->technology[level]->year > year)
-			_incorporate(data, modifiers, "Ahead of time in " + desc, G->CFG->tech_definitions[cat]->ahead_of_time);
+			_incorporate(data, country, modifiers, "Ahead of time in " + desc, G->CFG->tech_definitions[cat]->ahead_of_time);
 		//TODO: > or >= ?
 	}
 	if (array have = country->institutions) foreach (G->CFG->institutions; string id; mapping inst) {
-		if (have[inst->_index] == "1") _incorporate(data, modifiers, "Institution", inst->bonus);
+		if (have[inst->_index] == "1") _incorporate(data, country, modifiers, "Institution", inst->bonus);
 	}
 	//More modifier types to incorporate:
 	//- Monuments. Might be hard, since they have restrictions. Can we see in the savefile if they're active?
@@ -222,9 +223,9 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	//- Being a trade league leader (scaled by the number of members)
 	//- Stability
 
-	if (country->luck) _incorporate(data, modifiers, "Luck", G->CFG->static_modifiers->luck); //Lucky nations (AI-only) get bonuses.
-	if (int innov = threeplace(country->innovativeness)) _incorporate(data, modifiers, "Innovativeness", G->CFG->static_modifiers->innovativeness, innov, 100000);
-	if (int corr = threeplace(country->corruption)) _incorporate(data, modifiers, "Corruption", G->CFG->static_modifiers->corruption, corr, 100000);
+	if (country->luck) _incorporate(data, country, modifiers, "Luck", G->CFG->static_modifiers->luck); //Lucky nations (AI-only) get bonuses.
+	if (int innov = threeplace(country->innovativeness)) _incorporate(data, country, modifiers, "Innovativeness", G->CFG->static_modifiers->innovativeness, innov, 100000);
+	if (int corr = threeplace(country->corruption)) _incorporate(data, country, modifiers, "Corruption", G->CFG->static_modifiers->corruption, corr, 100000);
 	//Having gone through all of the above, we should now have estate influence modifiers.
 	//Now we can calculate the total influence, and then add in the effects of each estate.
 	if (country->estate) {
@@ -236,8 +237,8 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 			foreach (Array.arrayify(estate->granted_privileges), [string priv, string date]) {
 				mapping privilege = G->CFG->estate_privilege_definitions[priv]; if (!privilege) continue;
 				string desc = sprintf("%s: %s", L10N(estate->type), L10N(priv));
-				_incorporate(data, modifiers, desc, privilege->penalties);
-				_incorporate(data, modifiers, desc, privilege->benefits);
+				_incorporate(data, country, modifiers, desc, privilege->penalties);
+				_incorporate(data, country, modifiers, desc, privilege->benefits);
 			}
 		}
 		//Now calculate the influence and loyalty of each estate, and the resulting effects.
@@ -271,7 +272,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 			if (total_influence < 60000) mul = 3;
 			if (total_influence < 40000) mul = 2;
 			if (total_influence < 20000) mul = 1;
-			_incorporate(data, modifiers, String.capitalize(opinion) + " " + L10N(estate->type), estate_defn["country_modifier_" + opinion], mul, 4);
+			_incorporate(data, country, modifiers, String.capitalize(opinion) + " " + L10N(estate->type), estate_defn["country_modifier_" + opinion], mul, 4);
 		}
 	}
 	//To figure out what advisors you have hired, we first need to find all advisors.
@@ -289,7 +290,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	foreach (Array.arrayify(country->advisor), mapping adv) {
 		adv = advisors[adv->id]; if (!adv) continue;
 		mapping type = G->CFG->advisor_definitions[adv->type];
-		_incorporate(data, modifiers, L10N(adv->type) + " (" + adv->name + ")", type);
+		_incorporate(data, country, modifiers, L10N(adv->type) + " (" + adv->name + ")", type);
 	}
 	return country->all_country_modifiers = modifiers;
 }
@@ -302,32 +303,32 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	if (prov->center_of_trade) {
 		string type = G->CFG->province_info[(string)id]->?has_port ? "coastal" : "inland";
 		mapping cot = G->CFG->cot_definitions[type + prov->center_of_trade];
-		_incorporate(data, modifiers, "Level " + prov->center_of_trade + " COT", cot->?province_modifiers);
+		_incorporate(data, prov, modifiers, "Level " + prov->center_of_trade + " COT", cot->?province_modifiers);
 	}
 	if (int l3cot = country->area_has_level3[?G->CFG->prov_area[(string)id]]) {
 		string type = G->CFG->province_info[(string)l3cot]->?has_port ? "coastal3" : "inland3";
 		mapping cot = G->CFG->cot_definitions[type];
-		_incorporate(data, modifiers, "L3 COT in area", cot->?state_modifiers);
+		_incorporate(data, prov, modifiers, "L3 COT in area", cot->?state_modifiers);
 	}
 	foreach (prov->buildings || ([]); string b;)
-		_incorporate(data, modifiers, "Building", G->CFG->building_types[b]);
+		_incorporate(data, prov, modifiers, "Building", G->CFG->building_types[b]);
 	mapping area = data->map_area_data[G->CFG->prov_area[(string)id]]->?state;
 	foreach (Array.arrayify(area->?country_state), mapping state) if (state->country == prov->owner) {
-		if (state->prosperity == "100.000") _incorporate(data, modifiers, "Prosperity", G->CFG->static_modifiers->prosperity);
-		_incorporate(data, modifiers, "State edict - " + L10N(state->active_edict->?which), G->CFG->state_edicts[state->active_edict->?which]);
+		if (state->prosperity == "100.000") _incorporate(data, prov, modifiers, "Prosperity", G->CFG->static_modifiers->prosperity);
+		_incorporate(data, prov, modifiers, "State edict - " + L10N(state->active_edict->?which), G->CFG->state_edicts[state->active_edict->?which]);
 	}
-	_incorporate(data, modifiers, "Terrain", G->CFG->terrain_definitions->categories[G->CFG->province_info[(string)id]->terrain]);
-	_incorporate(data, modifiers, "Climate", G->CFG->static_modifiers[G->CFG->province_info[(string)id]->climate]);
+	_incorporate(data, prov, modifiers, "Terrain", G->CFG->terrain_definitions->categories[G->CFG->province_info[(string)id]->terrain]);
+	_incorporate(data, prov, modifiers, "Climate", G->CFG->static_modifiers[G->CFG->province_info[(string)id]->climate]);
 	if (prov->hre) {
 		foreach (Array.arrayify(data->empire->passed_reform), string reform)
-			_incorporate(data, modifiers, "HRE province (" + L10N(reform) + ")", G->CFG->imperial_reforms[reform]->?province);
+			_incorporate(data, prov, modifiers, "HRE province (" + L10N(reform) + ")", G->CFG->imperial_reforms[reform]->?province);
 	}
-	_incorporate(data, modifiers, "Trade good: " + prov->trade_goods, G->CFG->trade_goods[prov->trade_goods]->?province);
+	_incorporate(data, prov, modifiers, "Trade good: " + prov->trade_goods, G->CFG->trade_goods[prov->trade_goods]->?province);
 	//How do we know if it's a city or not? This should be applied only if it's a fully-developed province, not a colony.
-	_incorporate(data, modifiers, "City", G->CFG->static_modifiers->city);
-	if (prov->has_port) _incorporate(data, modifiers, "Port", G->CFG->static_modifiers->port);
+	_incorporate(data, prov, modifiers, "City", G->CFG->static_modifiers->city);
+	if (prov->has_port) _incorporate(data, prov, modifiers, "Port", G->CFG->static_modifiers->port);
 	int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
-	_incorporate(data, modifiers, "Development", G->CFG->static_modifiers->development, dev);
+	_incorporate(data, prov, modifiers, "Development", G->CFG->static_modifiers->development, dev);
 	//TODO: in_state, in_capital_state, coastal, seat_in_parliament
 	return prov->all_province_modifiers = modifiers;
 }
