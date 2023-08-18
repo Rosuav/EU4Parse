@@ -1058,6 +1058,30 @@ mapping ship_types = transform(
 	"transport: war_canoe cog flute brig merchantman trabakul eastindiaman ",
 );
 
+//Step through a set of highlighting instructions and list the relevant provinces
+//Returns an array of provinces, with subgroups of provinces indicated with subarrays
+//starting with a heading. (Province IDs are all returned numerically.)
+array(int|array(string|int|array)) enumerate_highlight_provinces(mapping data, mapping country, mapping highlight) {
+	if (!highlight || !sizeof(highlight)) return ({ }); //Mission does not involve provinces, don't highlight it.
+	//Very simplistic filter handling.
+	array filters = ({ });
+	//TODO: Require that the province not be owned by you *or any non-trib subject*
+	if (highlight->NOT->?country_or_non_sovereign_subject_holds == "ROOT")
+		filters += ({ lambda(mapping p) {return p->controller != country->tag;} });
+	//Very simplistic search criteria.
+	array provs = Array.arrayify(highlight->province_id) + Array.arrayify(highlight->OR->?province_id);
+	array areas = Array.arrayify(highlight->area) + Array.arrayify(highlight->OR->?area);
+	array interesting = ({ });
+	foreach (G->CFG->map_areas[areas[*]] + ({provs}), array|object area)
+		foreach (area;; string provid) {
+			mapping prov = data->provinces["-" + provid];
+			int keep = 1;
+			foreach (filters, function f) keep = keep && f(prov);
+			if (!keep) continue;
+			interesting += ({(int)provid});
+		}
+	return interesting;
+}
 /*
 Need to show how many merchants (other than you) are transferring on this path.
 - For each country, if them->type == "1", and if them->steer_power == us->steer_power, add 1. Exclude self.
@@ -1478,25 +1502,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				if (arrayp(info->required_missions)) foreach (info->required_missions, string req)
 					if (!has_value(completed, req)) prereq = 0;
 				if (!prereq) continue; //One or more prerequisite missions isn't completed, don't highlight it
-				mapping highlight = info->provinces_to_highlight;
-				if (!highlight) continue; //Mission does not involve provinces, don't highlight it.
-				//Very simplistic filter handling.
-				array filters = ({ });
-				//TODO: Require that the province not be owned by you *or any non-trib subject*
-				if (highlight->NOT->?country_or_non_sovereign_subject_holds == "ROOT")
-					filters += ({ lambda(mapping p) {return p->controller != tag;} });
-				//Very simplistic search criteria.
-				array provs = Array.arrayify(highlight->province_id) + Array.arrayify(highlight->OR->?province_id);
-				array areas = Array.arrayify(highlight->area) + Array.arrayify(highlight->OR->?area);
-				array interesting = ({ });
-				foreach (G->CFG->map_areas[areas[*]] + ({provs}), array|object area)
-					foreach (area;; string provid) {
-						mapping prov = data->provinces["-" + provid];
-						int keep = 1;
-						foreach (filters, function f) keep = keep && f(prov);
-						if (!keep) continue;
-						interesting += ({({provid, prov->name})});
-					}
+				array interesting = enumerate_highlight_provinces(data, country, info->provinces_to_highlight);
 				if (sizeof(interesting)) write->decisions_missions += ({([
 					"id": id,
 					"name": title,
@@ -1506,9 +1512,6 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		}
 	}
 	/* TODO: List decisions as well as missions
-	- For the most part, just filter by tag, nothing else. Be aware that there might be
-	  "OR = { tag = X tag = Y }", as quite a few decisions are shared.
-	- May also need to check "culture_group = iberian" and "primary_culture = basque"
 	- Show if major decision
 	- provinces_to_highlight
 	  - May list a single province_id, an area name, or a region name
@@ -1523,6 +1526,13 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	foreach (G->CFG->country_decisions; string kwd; mapping info) {
 		if (ignored[kwd]) continue; //The user has said to ignore it, so hide it from the list.
 		if (!trigger_matches(data, ({country}), "AND", info->potential)) continue;
+		continue; //below isn't working yet
+		array interesting = enumerate_highlight_provinces(data, country, info->provinces_to_highlight);
+		if (sizeof(interesting)) write->decisions_missions += ({([
+			"id": kwd,
+			"name": L10N(kwd + "_title"),
+			"provinces": interesting,
+		])});
 	}
 
 	//Get some info about provinces, for the sake of the province details view

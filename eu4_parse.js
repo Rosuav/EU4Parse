@@ -250,7 +250,7 @@ section("decisions_missions", "", "Decisions and Missions", state => [
 	SUMMARY(`Decisions and Missions [${state.decisions_missions.length}]`),
 	state.decisions_missions.map(mission => [
 		H3([proventer(mission.id), mission.name]),
-		UL(mission.provinces.map(p => LI(PROV(...p)))),
+		UL(mission.provinces.map(p => typeof p === "number" && LI(PROV(p)))),
 		provleave(),
 	]),
 ]);
