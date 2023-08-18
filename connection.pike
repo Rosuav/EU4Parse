@@ -508,7 +508,9 @@ protected void create(string name) {
 	catch {cfg = Standards.JSON.decode(Stdio.read_file("preferences.json"));};
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
+	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
 	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");
 	Stdio.Port mainsock = Stdio.Port();
 	mainsock->bind(1444, sock_connected, "::", 1);
+	G->G->have_sockets = 1;
 }

@@ -83,5 +83,14 @@ int main(int argc, array(string) argv) {
 	bootstrap("analysis");
 	bootstrap("monitors");
 	G->parser->spawn();
+	signal(3) { //SIGQUIT, generally sent by Ctrl-Backslash, can be used to trigger a code reload.
+		werror("RELOADING/^\n"); //heh heh... there'll probably be a "\^" at the start of the line...
+		bootstrap("globals");
+		bootstrap("parser");
+		bootstrap("connection");
+		bootstrap("analysis");
+		bootstrap("monitors");
+		//Note that G->CFG is not replaced here
+	};
 	return -1;
 }
