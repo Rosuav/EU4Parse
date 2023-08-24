@@ -223,7 +223,7 @@ class GameConfig {
 	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]);
 	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
-	mapping cot_definitions, state_edicts, terrain_definitions, imperial_reforms;
+	mapping cot_definitions, state_edicts, holy_orders, terrain_definitions, imperial_reforms;
 	mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
 	mapping tradenode_definitions, great_projects, climates, opinion_modifiers;
 	mapping advisor_definitions, religion_definitions, unit_definitions, culture_definitions;
@@ -582,6 +582,7 @@ log = \"PROV-TERRAIN-END\"
 			info->id = id;
 		}
 		state_edicts = parse_config_dir("/common/state_edicts");
+		holy_orders = parse_config_dir("/common/holy_orders");
 		imperial_reforms = parse_config_dir("/common/imperial_reforms");
 		cb_types = parse_config_dir("/common/cb_types");
 		wargoal_types = parse_config_dir("/common/wargoal_types");

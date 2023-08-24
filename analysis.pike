@@ -464,6 +464,7 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	foreach (Array.arrayify(area->?country_state), mapping state) if (state->country == prov->owner) {
 		if (state->prosperity == "100.000") _incorporate(data, prov, modifiers, "Prosperity", G->CFG->static_modifiers->prosperity);
 		_incorporate(data, prov, modifiers, "State edict - " + L10N(state->active_edict->?which), G->CFG->state_edicts[state->active_edict->?which]);
+		_incorporate(data, prov, modifiers, "Holy order - " + L10N(state->holy_order), G->CFG->holy_orders[state->holy_order]);
 	}
 	_incorporate(data, prov, modifiers, "Terrain", G->CFG->terrain_definitions->categories[G->CFG->province_info[(string)id]->terrain]);
 	_incorporate(data, prov, modifiers, "Climate", G->CFG->static_modifiers[G->CFG->province_info[(string)id]->climate]);
