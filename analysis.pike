@@ -477,9 +477,27 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	_incorporate(data, prov, modifiers, "City", G->CFG->static_modifiers->city);
 	if (prov->has_port) _incorporate(data, prov, modifiers, "Port", G->CFG->static_modifiers->port);
 	int dev = (int)prov->base_tax + (int)prov->base_production + (int)prov->base_manpower;
+	modifiers->development = dev;
 	_incorporate(data, prov, modifiers, "Development", G->CFG->static_modifiers->development, dev);
+	//TODO: development_scaled (to calculate the actual development cost)
+	//TODO: expanded_infrastructure, centralize_state
 	//TODO: in_state, in_capital_state, coastal, seat_in_parliament
 	return prov->all_province_modifiers = modifiers;
+}
+
+//Note that, unlike province and country modifiers, this is not actually cached anywhere.
+//(It does make good use of province modifier caching though.)
+mapping(string:int) all_area_modifiers(mapping data, string area) {
+	mapping modifiers = (["_sources": ([])]);
+	foreach (G->CFG->map_areas[area], string id) {
+		mapping prov = all_province_modifiers(data, (int)id);
+		string label = data->provinces["-" + id]->name + ": ";
+		foreach ("statewide_governing_cost" / " ", string attr) if (prov[attr]) {
+			modifiers[attr] += prov[attr];
+			modifiers->_sources[attr] += label + prov->_sources[attr][*];
+		}
+	}
+	return modifiers;
 }
 
 //Estimate a months' production of ducats/manpower/sailors (yes, I'm fixing the scaling there)
@@ -1935,4 +1953,48 @@ void analyze_wars(mapping data, multiset(string) tags, mapping write) {
 		sort(armies); sort(navies);
 		summary->armies = armies[*][-1]; summary->navies = navies[*][-1];
 	}
+}
+
+/* TODO:
+1. Enumerate all areas in which you have provinces. Show whether state or not.
+2. For each state, show and sum the governing cost. Should match the in-game display.
+3. For each territory, show the number of provinces with full cores vs territorial cores vs trade company vs colony
+4. Predict the REAL governing cost of stating that area.
+
+Note that a lot of this info IS available in-game, but only as raw numbers. For example, attempting to state a territory
+will tell you the increase in cost that would occur, but you then have to check that against others. Also, the current
+usage does not update for colonial core to full core transitions until EOM.
+*/
+void analyze_states(mapping data, string name, string tag, mapping write, mapping prefs) {
+	mapping country = data->countries[tag];
+	//string base_province = "1166"; //Loango in Kongolese Coast (territory)
+	string base_province = "4549"; //Xativa in Valencia (state)
+	//string base_province = "183"; //Paris in Ile-de-France (state)
+	foreach (G->CFG->map_areas[G->CFG->prov_area[base_province]], string id) m_delete(data->provinces["-" + id], "all_province_modifiers"); //Decache
+	mapping area = all_area_modifiers(data, G->CFG->prov_area[base_province]);
+	mapping nation = all_country_modifiers(data, country);
+	int is_state = has_value(Array.arrayify(data->map_area_data[G->CFG->prov_area[base_province]]->?state->?country_state)->country, tag);
+	werror("Area [%s]: %O\n", is_state ? "state" : "territory", area);
+	foreach (G->CFG->map_areas[G->CFG->prov_area[base_province]], string id) {
+		mapping prov = all_province_modifiers(data, (int)id) - (<"_index", "_sources">);
+		int cost = prov->development * 1000;
+		int mod = 1000 + prov->local_governing_cost + area->statewide_governing_cost + nation->governing_cost;
+		if (is_state) mod += nation->state_governing_cost; //Check these!
+		else mod += nation->territory_governing_cost - 750; //Territories get a 75% discount
+		//TODO: Colonial core - 50% reduction
+		//TODO: territory_governing_cost, trade_company_governing_cost, state_governing_cost
+		if (mod < 10) mod = 10; //Can't get the percentage modifiers stronger than a 99% discount
+		werror("%s: %O\n", data->provinces["-" + id]->name, prov);
+		werror("%s: %d * %d/1000 %+d\n", data->provinces["-" + id]->name, cost, mod, prov->local_governing_cost_increase);
+		cost = (cost * mod) / 1000 + prov->local_governing_cost_increase;
+		if (cost < 0) cost = 0; //But a state house can reduce it all the way to zero.
+		werror("%s: %d\n", data->provinces["-" + id]->name, cost);
+	}
+}
+
+protected void create() {
+	mapping data = G->G->last_parsed_savefile;
+	if (!data) return;
+	mapping write = ([]);
+	analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 }
