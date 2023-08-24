@@ -455,8 +455,11 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		mapping cot = G->CFG->cot_definitions[type];
 		_incorporate(data, prov, modifiers, "L3 COT in area", cot->?state_modifiers);
 	}
-	foreach (prov->buildings || ([]); string b;)
+	foreach (prov->buildings || ([]); string b;) {
 		_incorporate(data, prov, modifiers, "Building", G->CFG->building_types[b]);
+		if (has_value(G->CFG->building_types[b]->bonus_manufactory || ({ }), prov->trade_goods))
+			_incorporate(data, prov, modifiers, "Mfg has " + prov->trade_goods, G->CFG->building_types[b]->bonus_modifier);
+	}
 	mapping area = data->map_area_data[G->CFG->prov_area[(string)id]]->?state;
 	foreach (Array.arrayify(area->?country_state), mapping state) if (state->country == prov->owner) {
 		if (state->prosperity == "100.000") _incorporate(data, prov, modifiers, "Prosperity", G->CFG->static_modifiers->prosperity);
