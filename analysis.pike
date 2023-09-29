@@ -1240,6 +1240,47 @@ us->prev == "Transfers from traders downstream". It's 20% of provincial trade po
 long as you have at least 10.
 */
 
+//Returns threeplace of the net unrest
+int provincial_unrest(mapping data, string provid) {
+	mapping prov = data->provinces["-" + provid];
+	mapping country = data->countries[prov->owner];
+
+	//Calculate and cache which provinces are covered by troops
+	mapping coverage = country->rebel_suppression_coverage;
+	if (!coverage) {
+		coverage = ([]);
+		foreach (Array.arrayify(country->army), mapping army) {
+			//TODO: Calculate the actual effective unrest bonus. The base value is 0.25
+			//per regiment, then multiply that by five if hunting rebels, but split the
+			//effect across the provinces. For now, we just mark it as "done".
+			//TODO: Rebel suppression efficiency?
+			int effect = 1;
+			coverage[army->location] += effect;
+			mapping hunt_rebel = army->mission->?hunt_rebel;
+			if (!hunt_rebel) continue; //Not hunting rebels (maybe on another mission, or no mission at all).
+			foreach (hunt_rebel->areas, string a)
+				foreach (G->CFG->map_areas[a];; string id) coverage[id] += effect;
+		}
+		country->rebel_suppression_coverage = coverage;
+	}
+	//FIXME
+	return 0;
+
+	//So! How much unrest is there?
+	//werror("%O\n", prov - (<"discovered_by", "all_province_modifiers">));
+	int unrest = 0;
+	array sources = ({ });
+	m_delete(country, "all_country_modifiers");
+	mapping counmod = all_country_modifiers(data, country);
+	m_delete(prov, "all_province_modifiers");
+	mapping provmod = all_province_modifiers(data, (int)provid);
+	unrest += counmod->global_unrest + provmod->local_unrest;
+	sources += counmod->_sources->global_unrest;
+	sources += provmod->_sources->local_unrest; //TODO untested
+	werror("Unrest sources: %O\n", sources);
+	return unrest;
+}
+
 void analyze_obscurities(mapping data, string name, string tag, mapping write, mapping prefs) {
 	//TODO: Break this gigantic function up, maybe put some things in with existing functions.
 
@@ -1745,32 +1786,24 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		"cultures": all_cultures,
 	]);
 
-	//List all current rebellions and whether the provinces are covered by troops
-	mapping coverage = ([]);
-	foreach (Array.arrayify(country->army), mapping army) {
-		//TODO: Calculate the actual effective unrest bonus. The base value is 0.25
-		//per regiment, then multiply that by five if hunting rebels, but split the
-		//effect across the provinces. For now, we just mark it as "done".
-		int effect = 1;
-		coverage[army->location] += effect;
-		mapping hunt_rebel = army->mission->?hunt_rebel;
-		if (!hunt_rebel) continue; //Not hunting rebels (maybe on another mission, or no mission at all).
-		foreach (hunt_rebel->areas, string a)
-			foreach (G->CFG->map_areas[a];; string id) coverage[id] += effect;
-	}
 	write->unguarded_rebels = ({ });
 	foreach (Array.arrayify(data->rebel_faction), mapping faction) if (faction->country == tag) {
-		//A bit of a cheat here. I would like to check whether any province has positive
-		//unrest, but that's really hard to calculate. So instead, we just show every
-		//rebel faction with at least 30% progress.
+		//werror("Faction: %O\n", faction);
 		//NOTE: faction->province is a single province ID. Not sure what it is.
 		//NOTE: faction->active is a thing. Maybe says if rebels have spawned??
 		//What happens with rebels that spawn without unrest (eg pretenders)? Don't crash.
 		//What if rebels cross the border? (Probably not in this list, since ->country != tag)
-		if ((int)faction->progress < 30) continue; //Could be null, otherwise is eg "10.000" for 10% progress
+		//TODO: Find all possible_provinces which have >0 unrest (if none, ignore this faction)
+		//Show faction and all provinces with unrest; highlight those provinces not guarded.
+		//Notify if any provinces are unguarded. Priority notify if any unguarded and progress > 50%.
+		//Can we assume that every province will be included in one of these factions? Probably.
+		//if ((int)faction->progress < 30) continue; //Could be null, otherwise is eg "10.000" for 10% progress
 		array uncovered = ({ });
-		foreach (faction->possible_provinces || ({ }), string prov)
-			if (!coverage[prov]) uncovered += ({prov});
+		foreach (faction->possible_provinces || ({ }), string provid) {
+			//How much unrest is there here?
+			int unrest = provincial_unrest(data, provid);
+			if (!country->rebel_suppression_coverage[provid]) uncovered += ({provid});
+		}
 		if (sizeof(uncovered)) write->unguarded_rebels += ({([
 			"provinces": uncovered,
 			"name": faction->name,
@@ -2048,5 +2081,9 @@ protected void create() {
 	mapping data = G->G->last_parsed_savefile;
 	if (!data) return;
 	mapping write = ([]);
-	analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
+	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
+	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
+	//werror("Corinth: %O\n", provincial_unrest(data, "4701")); //Corinth - lost 20 years
+	werror("Atina: %O\n", provincial_unrest(data, "146")); //Atina - normal conquest
+	//werror("Sivas: %O\n", provincial_unrest(data, "329")); //Sivas - active missionary
 }
