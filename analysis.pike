@@ -1282,8 +1282,6 @@ int provincial_unrest(mapping data, string provid) {
 		}
 		country->rebel_suppression_coverage = coverage;
 	}
-	//FIXME
-	return 0;
 
 	//So! How much unrest is there?
 	//werror("%O\n", prov - (<"discovered_by", "all_province_modifiers">));
@@ -1308,7 +1306,7 @@ int provincial_unrest(mapping data, string provid) {
 	//Note that, in theory, this could incorporate G->CFG->static_modifiers->nationalism for
 	//each year of nationalism. For now though, we just have this hard-coded.
 	unrest += nationalism * 500; sources += ({"Separatism: " + nationalism * 500});
-	werror("Unrest sources: %O\n", sources);
+	//werror("Unrest sources: %O\n", sources);
 	return unrest;
 }
 
@@ -1831,14 +1829,13 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		//if ((int)faction->progress < 30) continue; //Could be null, otherwise is eg "10.000" for 10% progress
 		array uncovered = ({ });
 		foreach (faction->possible_provinces || ({ }), string provid) {
-			//How much unrest is there here?
 			int unrest = provincial_unrest(data, provid);
-			if (!country->rebel_suppression_coverage[provid]) uncovered += ({provid});
+			if (unrest > 0 && !country->rebel_suppression_coverage[provid]) uncovered += ({provid});
 		}
 		if (sizeof(uncovered)) write->unguarded_rebels += ({([
 			"provinces": uncovered,
 			"name": faction->name,
-			"progress": (int)faction->progress,
+			"progress": (int)faction->progress || 0, //(force integer zero rather than null)
 			"home_province": faction->province, //Probably irrelevant
 		])});
 	}
@@ -2116,5 +2113,6 @@ protected void create() {
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//werror("Corinth: %O\n", provincial_unrest(data, "4701")); //Corinth - lost 20 years
 	werror("Atina: %O\n", provincial_unrest(data, "146")); //Atina - normal conquest
+	werror("Avlonya: %O\n", provincial_unrest(data, "143")); //Avlonya - nothing surprising, no unrest
 	//werror("Sivas: %O\n", provincial_unrest(data, "329")); //Sivas - active missionary
 }
