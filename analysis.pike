@@ -171,6 +171,15 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (int)scope->technology[type] >= (int)value;
 		case "uses_piety":
 			return all_country_modifiers(data, scope)->uses_piety;
+		case "num_of_janissaries": return (int)scope->num_subunits->?janissaries >= (int)value;
+		case "janissary_percentage": {
+			if (undefinedp(scope->janissary_percentage)) {
+				//This gets checked a LOT by the Janissaries Estate, so cache the value
+				int total_army = scope->army && sizeof(scope->army) && `+(@sizeof(scope->army->regiment[*]));
+				scope->janissary_percentage = threeplace(scope->num_subunits_type_and_cat->?infantry->?janissaries) / total_army;
+			}
+			return scope->janissary_percentage >= threeplace(value);
+		}
 		//What's the proper way to recognize colonial nations?
 		//One of these is almost certainly wrong. Do they both need a condition (has/hasn't an overlord)?
 		//Should they be identified by governmental forms?
@@ -420,7 +429,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 				sscanf(reverse(mod), "%[0-9] :%s", string value, string desc);
 				influence[reverse(desc)] += (int)reverse(value) * 100; //Just in case they show up more than once
 			}
-			influence["Land share"] = threeplace(estate->territory) / 2; //Is this always the case? 42% land share gives 21% influence?
+			influence["Land share"] = threeplace(estate->territory) * threeplace(estate_defn->influence_from_dev_modifier) / 2000; //Not sure why the "/2" part; the modifier is 1.0 if it scales this way, otherwise larger or smaller numbers.
 			//Attempt to parse the estate influence modifier blocks. This is imperfect and limited.
 			foreach (Array.arrayify(estate_defn->influence_modifier), mapping mod) {
 				if (!trigger_matches(data, ({country}), "AND", mod->trigger)) continue;
