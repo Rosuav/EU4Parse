@@ -302,6 +302,7 @@ void _incorporate_all(mapping data, mapping scope, mapping modifiers, string sou
 mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (mapping cached = country->all_country_modifiers) return cached;
 	mapping modifiers = (["_sources": ([])]);
+	_incorporate(data, country, modifiers, "Base", G->CFG->static_modifiers->base_values);
 	//Ideas are recorded by their groups and how many you've taken from that group.
 	array ideas = enumerate_ideas(country->active_idea_groups);
 	_incorporate(data, country, modifiers, ideas->desc[*], ideas[*]); //TODO: TEST ME
@@ -533,11 +534,11 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		else foreach (G->CFG->religion_definitions; string grp; mapping defn) {
 			if (defn[prov->religion] && defn[country->religion]) type = "heretic";
 		}
-		//FIXME: Tolerance is affected by estate loyalty/influence and is currently miscalculating for Dhimmi
-		//FIXME: Base tolerance? Is it in static or defines?
-		//werror("TOLERANCE TYPE: %O\n", type);
-		//werror("TOLERANCE: %O %O\n", counmod["tolerance_" + type], counmod->_sources["tolerance_" + type]);
-		//TODO: Incorporate this level of tolerance or intolerance
+		int tolerance = counmod["tolerance_" + type];
+		//Tolerance of True Faith has no limit, but the other two are capped.
+		if (type != "own") tolerance = min(tolerance, counmod["tolerance_of_" + type + "s_capacity"]);
+		if (tolerance > 0) _incorporate(data, prov, modifiers, L10N("tolerance"), G->CFG->static_modifiers->tolerance, tolerance, 1000);
+		if (tolerance < 0) _incorporate(data, prov, modifiers, L10N("intolerance"), G->CFG->static_modifiers->intolerance, tolerance, 1000);
 	}
 	return prov->all_province_modifiers = modifiers;
 }
