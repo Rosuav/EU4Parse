@@ -331,6 +331,14 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	_incorporate_all(data, country, modifiers, "Modifier", G->CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
 	mapping age = G->CFG->age_definitions[data->current_age]->abilities;
 	_incorporate(data, country, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
+	_incorporate(data, country, modifiers, L10N("war_exhaustion"), G->CFG->static_modifiers->war_exhaustion, threeplace(country->war_exhaustion), 1000);
+	_incorporate(data, country, modifiers, L10N("over_extension"), G->CFG->static_modifiers->over_extension, threeplace(country->overextension_percentage), 1000);
+	int stab = (int)country->stability;
+	if (stab > 0) _incorporate(data, country, modifiers, L10N("positive_stability"), G->CFG->static_modifiers->positive_stability, stab, 1);
+	if (stab < 0) _incorporate(data, country, modifiers, L10N("negative_stability"), G->CFG->static_modifiers->negative_stability, stab, 1);
+	int relig_unity = min(max(threeplace(country->religious_unity), 0), 1000);
+	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->religious_unity, relig_unity, 1000);
+	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->inverse_religious_unity, 1000 - relig_unity, 1000);
 	mapping tech = country->technology || ([]);
 	sscanf(data->date, "%d.%d.%d", int year, int mon, int day);
 	foreach ("adm dip mil" / " ", string cat) {
