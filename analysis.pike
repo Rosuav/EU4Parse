@@ -1740,6 +1740,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	constant integration = ([
 		"personal_union": 50,
 		"vassal": 10, "daimyo_vassal": 10, "client_vassal": 10, //Assuming all these have the same ten-year delay?
+		"core_eyalet": 10, //Ottoman special vassal type.
 		"appanage": 10, //French special vassal type. Can we calculate all these from the files somewhere?
 	]);
 	foreach (Array.arrayify(country->subjects), string|mapping stag) {
