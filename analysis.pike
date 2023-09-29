@@ -1295,7 +1295,19 @@ int provincial_unrest(mapping data, string provid) {
 	mapping provmod = all_province_modifiers(data, (int)provid);
 	unrest += counmod->global_unrest + provmod->local_unrest;
 	sources += counmod->_sources->global_unrest;
-	sources += provmod->_sources->local_unrest; //TODO untested
+	sources += provmod->_sources->local_unrest;
+	//Separatism is a bit harder to calculate. This could theoretically be incorporated
+	//into all_province_modifiers(), but it's notably more costly than other things, and
+	//as of 20230930 it only affects unrest.
+	//What happens if you have fractional years of nationalism? Not currently supported.
+	int years = 30 + (counmod->years_of_nationalism + provmod->local_years_of_nationalism) / 1000;
+	int owner_change = -1;
+	foreach (sort(indices(prov->history)), string key)
+		if ((int)key && prov->history[key]->owner) owner_change = (int)key;
+	int nationalism = owner_change + years - (int)data->date;
+	//Note that, in theory, this could incorporate G->CFG->static_modifiers->nationalism for
+	//each year of nationalism. For now though, we just have this hard-coded.
+	unrest += nationalism * 500; sources += ({"Separatism: " + nationalism * 500});
 	werror("Unrest sources: %O\n", sources);
 	return unrest;
 }
