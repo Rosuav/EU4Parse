@@ -225,7 +225,7 @@ class GameConfig {
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
 	mapping cot_definitions, state_edicts, holy_orders, terrain_definitions, imperial_reforms;
 	mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
-	mapping tradenode_definitions, great_projects, climates, opinion_modifiers;
+	mapping tradenode_definitions, great_projects, climates, opinion_modifiers, ruler_personalities;
 	mapping advisor_definitions, religion_definitions, unit_definitions, culture_definitions;
 	array military_tech_levels, tradenode_upstream_order, custom_ideas;
 	mapping building_types; array building_id;
@@ -594,6 +594,7 @@ log = \"PROV-TERRAIN-END\"
 		culture_definitions = parse_config_dir("/common/cultures");
 		religion_definitions = parse_config_dir("/common/religions");
 		great_projects = parse_config_dir("/common/great_projects");
+		ruler_personalities = parse_config_dir("/common/ruler_personalities");
 		retain_map_indices = 1;
 		tradenode_definitions = parse_config_dir("/common/tradenodes");
 		retain_map_indices = 0;

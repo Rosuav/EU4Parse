@@ -363,6 +363,14 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (array have = country->institutions) foreach (G->CFG->institutions; string id; mapping inst) {
 		if (have[inst->_index] == "1") _incorporate(data, country, modifiers, "Institution", inst->bonus);
 	}
+	if (country->monarch) {
+		//Is there any way to directly look up the monarch details by ID?
+		mapping monarch = ([]);
+		foreach (sort(indices(country->history)), string key)
+			monarch = ((int)key && mappingp(country->history[key]) && country->history[key]->monarch) || monarch;
+		if (mappingp(monarch->personalities))
+			_incorporate_all(data, country, modifiers, "Ruler -", G->CFG->ruler_personalities, indices(monarch->personalities));
+	}
 
 	//Legitimacy and its alternates
 	string legitimacy_type = "";
