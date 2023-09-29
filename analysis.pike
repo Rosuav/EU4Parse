@@ -264,7 +264,8 @@ array(mapping) enumerate_ideas(mapping idea_groups) {
 
 //Gather ALL a country's modifiers. Or, try to. Note that conditional modifiers aren't included.
 void _incorporate(mapping data, mapping scope, mapping modifiers, string source, mapping effect, int|void mul, int|void div) {
-	if (effect) foreach (effect; string id; mixed val) {
+	if (!div) mul = div = 1; //Note that mul might be zero (with a nonzero div), in which case there's no effect; or negative.
+	if (effect && mul) foreach (effect; string id; mixed val) {
 		if ((id == "modifier" || id == "modifiers") && mappingp(val)) _incorporate(data, scope, modifiers, source, val, mul, div);
 		if (id == "conditional") {
 			//Conditional attributes. There may be multiple independent blocks; each
