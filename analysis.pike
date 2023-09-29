@@ -1121,7 +1121,11 @@ array(int|array(string|int|array)) enumerate_highlight_provinces(mapping data, m
 			case "region":
 				foreach (Array.arrayify(value), string reg) {
 					array prov = ({ });
-					foreach (Array.arrayify(G->CFG->map_regions[reg]->areas), string area) prov += G->CFG->map_areas[area];
+					foreach (Array.arrayify(G->CFG->map_regions[reg]->areas), string area)
+						//There seem to be some degenerate areas which, due to the way the parser
+						//handles empty arrays, are showing up as mappings. They're empty, so just
+						//ignore them.
+						if (sizeof(G->CFG->map_areas[area])) prov += G->CFG->map_areas[area];
 					interesting += ({({
 						"Region: " + L10N(reg),
 						enumerate_highlight_provinces(data, country, (["province_id": prov]), filter),
