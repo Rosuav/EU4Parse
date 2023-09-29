@@ -515,6 +515,20 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	//TODO: development_scaled (to calculate the actual development cost)
 	//TODO: expanded_infrastructure, centralize_state
 	//TODO: in_state, in_capital_state, coastal, seat_in_parliament
+	if (prov->owner) {
+		mapping counmod = all_country_modifiers(data, country);
+		//First off, what kind of religious tolerance is this?
+		string type = "heathen";
+		if (prov->religion == country->religion) type = "own";
+		else foreach (G->CFG->religion_definitions; string grp; mapping defn) {
+			if (defn[prov->religion] && defn[country->religion]) type = "heretic";
+		}
+		//FIXME: Tolerance is affected by estate loyalty/influence and is currently miscalculating for Dhimmi
+		//FIXME: Base tolerance? Is it in static or defines?
+		//werror("TOLERANCE TYPE: %O\n", type);
+		//werror("TOLERANCE: %O %O\n", counmod["tolerance_" + type], counmod->_sources["tolerance_" + type]);
+		//TODO: Incorporate this level of tolerance or intolerance
+	}
 	return prov->all_province_modifiers = modifiers;
 }
 
