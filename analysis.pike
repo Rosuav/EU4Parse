@@ -58,15 +58,16 @@ object calendar(string date) {
 	return Calendar.Gregorian.Day(year, mon, day);
 }
 
-//Resolve a relative tag name to the actual tag name. See https://eu4.paradoxwikis.com/Scopes for concepts and explanation.
-string resolve_scope_tag(mapping data, array(mapping) scopes, string tag) {
-	switch (tag) {
-		case "ROOT": return scopes[0]->tag;
-		case "FROM": return scopes[-2]->tag; //Not sure if this is right
-		case "PREV": return scopes[-2]->tag;
-		case "PREV_PREV": return scopes[-3]->tag;
-		case "THIS": return scopes[-1]->tag;
-		default: return tag;
+//Resolve a relative reference to the actual value. See https://eu4.paradoxwikis.com/Scopes for concepts and explanation.
+string resolve_scope(mapping data, array(mapping) scopes, string value, string|void attr) {
+	if (!attr) attr = "tag";
+	switch (value) {
+		case "ROOT": return scopes[0][attr];
+		case "FROM": return scopes[-2][attr]; //Not sure if this is right
+		case "PREV": return scopes[-2][attr];
+		case "PREV_PREV": return scopes[-3][attr];
+		case "THIS": return scopes[-1][attr];
+		default: return value;
 	}
 }
 
@@ -138,7 +139,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			//list of religions in the group specified, and ask if the country's is in
 			//that list.
 			return !undefinedp(G->CFG->religion_definitions[value][scope->religion]);
-		case "dominant_religion": return scope->dominant_religion == value;
+		case "dominant_religion": return scope->dominant_religion == resolve_scope(data, scopes, value, "dominant_religion");
 		case "technology_group": return scope->technology_group == value;
 		case "primary_culture": return scope->primary_culture == value;
 		case "culture_group":
@@ -211,13 +212,13 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 				if (G->CFG->tradenode_definitions[node->definitions]->location != (string)scope->id) continue;
 				array top = Array.arrayify(node->top_power);
 				if (!sizeof(top)) return 0; //There's nobody trading in this node (yet), so nobody is the top trade power.
-				return resolve_scope_tag(data, scopes, value) == top[0];
+				return resolve_scope(data, scopes, value) == top[0];
 			}
 			return 1; //Trade node not found, probably should throw an error actually
 		}
-		case "owned_by": return resolve_scope_tag(data, scopes, value) == scope->owner;
+		case "owned_by": return resolve_scope(data, scopes, value) == scope->owner;
 		case "country_or_non_sovereign_subject_holds": {
-			string tag = resolve_scope_tag(data, scopes, value);
+			string tag = resolve_scope(data, scopes, value);
 			if (tag == scope->owner) return 1;
 			mapping owner = data->countries[tag];
 			//It's owned by someone else. Are they subject to you?
