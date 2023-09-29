@@ -200,6 +200,11 @@ protected void create() {
 		//3) Watch for any CLOSE_WRITE or MOVED_TO. Wait a little bit. See what the newest file in
 		//   the directory is. Assumes that the directory is quiet apart from what we care about.
 		//Currently using option 1. Change if this causes problems.
+		werror("Inotify: %s %s\n", ([
+			System.Inotify.IN_CLOSE_WRITE: "IN_CLOSE_WRITE",
+			System.Inotify.IN_MOVED_FROM: "IN_MOVED_FROM",
+			System.Inotify.IN_MOVED_TO: "IN_MOVED_TO",
+		])[event] || (string)event, path);
 		switch (event) {
 			case System.Inotify.IN_CLOSE_WRITE: new_file = path; break;
 			case System.Inotify.IN_MOVED_FROM: if (path == new_file) {new_file = 0; nomnomcookie = cookie;} break;
