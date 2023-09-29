@@ -343,6 +343,30 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (array have = country->institutions) foreach (G->CFG->institutions; string id; mapping inst) {
 		if (have[inst->_index] == "1") _incorporate(data, country, modifiers, "Institution", inst->bonus);
 	}
+
+	//Legitimacy and its alternates
+	string legitimacy_type = "";
+	if (modifiers->republic) legitimacy_type = "republican_tradition";
+	else if (modifiers->enables_horde_idea_group) legitimacy_type = "horde_unity";
+	else if (modifiers->has_meritocracy) legitimacy_type = "meritocracy";
+	else if (modifiers->monarchy) legitimacy_type = "legitimacy";
+	else if (modifiers->has_devotion) legitimacy_type = "devotion";
+	//else if (modifiers->native_mechanic) ; //Native tribes have no legitimacy-like mechanic
+	//else werror("UNKNOWN LEGITIMACY TYPE: %O\n", country); //Shouldn't happen.
+	int legitimacy_value = threeplace(country[legitimacy_type]);
+	if (mapping inverse = G->CFG->static_modifiers["inverse_" + legitimacy_type]) {
+		//Republican Tradition has two contradictory effects, one scaling from 0%-100% as tradition goes 0-100,
+		//the other scaling as tradition goes 100-0.
+		_incorporate(data, country, modifiers, L10N(legitimacy_type), G->CFG->static_modifiers[legitimacy_type], legitimacy_value, 100000);
+		_incorporate(data, country, modifiers, L10N("inverse_" + legitimacy_type), inverse, 100000 - legitimacy_value, 100000);
+	} else {
+		//Everything else has a single main effect that scales both directions from 50.
+		//They may also have a low_ modifier which applies only if below 50.
+		_incorporate(data, country, modifiers, L10N(legitimacy_type), G->CFG->static_modifiers[legitimacy_type], legitimacy_value - 50000, 100000);
+		if (legitimacy_value < 50000)
+			_incorporate(data, country, modifiers, L10N(legitimacy_type), G->CFG->static_modifiers["low_" + legitimacy_type], 50000 - legitimacy_value, 100000);
+	}
+
 	//More modifier types to incorporate:
 	//- Monuments. Might be hard, since they have restrictions. Can we see in the savefile if they're active?
 	//- Religious modifiers (icons, cults, aspects, etc)
