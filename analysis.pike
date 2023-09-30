@@ -1324,12 +1324,19 @@ int|array(int|array(string)) provincial_unrest(mapping data, string provid, int|
 	//What happens if you have fractional years of nationalism? Not currently supported.
 	int years = 30 + (counmod->years_of_nationalism + provmod->local_years_of_nationalism) / 1000 + (int)prov->nationalism;
 	int owner_change = -1;
-	foreach (sort(indices(prov->history)), string key)
-		if ((int)key && prov->history[key]->owner) owner_change = (int)key;
+	foreach (sort(indices(prov->history)), string key) {
+		if (!(int)key) continue;
+		mapping|array entry = prov->history[key];
+		if (arrayp(entry)) entry = `|(@entry); //Fold them all together; really we only care about the presence of particular attributes.
+		if (!entry->owner) continue;
+		owner_change = (int)key;
+		if (entry->add_core) owner_change = -1; //Hypothesis: If you got core on a province at the same time as gaining ownership, no separatism?
+	}
+	//Additional hypothesis, not currently tested: If prov->history->add_core is/has the current owner, no separatism.
 	int nationalism = owner_change + years - (int)data->date;
 	//Note that, in theory, this could incorporate G->CFG->static_modifiers->nationalism for
 	//each year of nationalism. For now though, we just have this hard-coded.
-	if (prov->owner != prov->history->owner) {
+	if (prov->owner != prov->history->owner && nationalism > 0) {
 		//NOTE: I'm currently working with the hypothesis that prov->history->owner is
 		//an indication of whether there's separatism. For example, provinces owned at
 		//the start of the game have no separatism, despite the latest "owner" marker
@@ -2146,5 +2153,5 @@ protected void create() {
 	werror("Corinth: %O\n", provincial_unrest(data, "4701", 1)); //Corinth - lost 20 years
 	werror("Atina: %O\n", provincial_unrest(data, "146", 1)); //Atina - normal conquest
 	werror("Avlonya: %O\n", provincial_unrest(data, "143", 1)); //Avlonya - nothing surprising, no unrest
-	werror("Sivas: %O\n", provincial_unrest(data, "329", 1)); //Sivas - active missionary
+	werror("Constantinople: %O\n", provincial_unrest(data, "151", 1));
 }
