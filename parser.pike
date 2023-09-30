@@ -782,11 +782,12 @@ int main() {
 	Stdio.Buffer incoming = Stdio.Buffer(), outgoing = Stdio.Buffer();
 	pipe->set_buffer_mode(incoming, outgoing);
 	pipe->set_nonblocking(piperead, 0, pipe->close);
+	signal(3, 0); //Ignore SIGQUIT as it's used by the parent process to trigger reloads
 	return -1;
 }
 
 //Spawn and communicate with the parser subprocess
-Stdio.File parser_pipe = Stdio.File();
+Stdio.File parser_pipe = G->G->parser_pipe;
 int parsing = -1;
 void process_savefile(string fn) {parsing = 0; G->G->connection->send_updates_all(); parser_pipe->write(fn + "\n");}
 void parser_pipe_msg(object pipe, string msg) {
@@ -821,5 +822,5 @@ void spawn() {
 }
 
 protected void create() {
-	if (G->G->parser_pipe) parser_pipe = G->G->parser_pipe; else G->G->parser_pipe = parser_pipe; //TODO: Use @retain from StilleBot
+	if (!parser_pipe) parser_pipe = G->G->parser_pipe = Stdio.File();
 }
