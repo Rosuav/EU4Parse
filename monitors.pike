@@ -183,8 +183,8 @@ void watch_game_log(object inot) {
 }
 
 protected void create() {
-	if (G->G->have_inotify) return; //Hack. TODO: Either keep the inotify and change the code it calls, or close it and start over.
-	object inot = System.Inotify.Instance();
+	//if (G->G->inotify) G->G->inotify->close(); //Hack. TODO: Either keep the inotify and change the code it calls, or close it and start over.
+	object inot = G->G->inotify = System.Inotify.Instance();
 	string new_file; int nomnomcookie;
 	inot->add_watch(SAVE_PATH, System.Inotify.IN_CLOSE_WRITE | System.Inotify.IN_MOVED_TO | System.Inotify.IN_MOVED_FROM) {
 		[int event, int cookie, string path] = __ARGS__;
@@ -213,5 +213,4 @@ protected void create() {
 	};
 	watch_game_log(inot);
 	inot->set_nonblocking();
-	G->G->have_inotify = 1;
 }
