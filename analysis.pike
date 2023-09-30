@@ -1283,8 +1283,8 @@ us->prev == "Transfers from traders downstream". It's 20% of provincial trade po
 long as you have at least 10.
 */
 
-//Returns threeplace of the net unrest
-int provincial_unrest(mapping data, string provid) {
+//Returns threeplace of the net unrest, and optionally array of strings of why
+int|array(int|array(string)) provincial_unrest(mapping data, string provid, int|void detail) {
 	mapping prov = data->provinces["-" + provid];
 	mapping country = data->countries[prov->owner];
 
@@ -1322,15 +1322,23 @@ int provincial_unrest(mapping data, string provid) {
 	//into all_province_modifiers(), but it's notably more costly than other things, and
 	//as of 20230930 it only affects unrest.
 	//What happens if you have fractional years of nationalism? Not currently supported.
-	int years = 30 + (counmod->years_of_nationalism + provmod->local_years_of_nationalism) / 1000;
+	int years = 30 + (counmod->years_of_nationalism + provmod->local_years_of_nationalism) / 1000 + (int)prov->nationalism;
 	int owner_change = -1;
 	foreach (sort(indices(prov->history)), string key)
 		if ((int)key && prov->history[key]->owner) owner_change = (int)key;
 	int nationalism = owner_change + years - (int)data->date;
 	//Note that, in theory, this could incorporate G->CFG->static_modifiers->nationalism for
 	//each year of nationalism. For now though, we just have this hard-coded.
-	unrest += nationalism * 500; sources += ({"Separatism: " + nationalism * 500});
-	//werror("Unrest sources: %O\n", sources);
+	if (prov->owner != prov->history->owner) {
+		//NOTE: I'm currently working with the hypothesis that prov->history->owner is
+		//an indication of whether there's separatism. For example, provinces owned at
+		//the start of the game have no separatism, despite the latest "owner" marker
+		//being 1444.11.11 (or 1444.11.12), but their owner hasn't actually changed.
+		unrest += nationalism * 500; sources += ({"Separatism: " + nationalism * 500});
+	}
+
+	if (prov->missionary_construction) {unrest += 6000; sources += ({"Active Missionary: 6000"});}
+	if (detail) return ({unrest, sources});
 	return unrest;
 }
 
@@ -2135,8 +2143,8 @@ protected void create() {
 	mapping write = ([]);
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
-	//werror("Corinth: %O\n", provincial_unrest(data, "4701")); //Corinth - lost 20 years
-	werror("Atina: %O\n", provincial_unrest(data, "146")); //Atina - normal conquest
-	werror("Avlonya: %O\n", provincial_unrest(data, "143")); //Avlonya - nothing surprising, no unrest
-	//werror("Sivas: %O\n", provincial_unrest(data, "329")); //Sivas - active missionary
+	//werror("Corinth: %O\n", provincial_unrest(data, "4701", 1)); //Corinth - lost 20 years
+	werror("Atina: %O\n", provincial_unrest(data, "146", 1)); //Atina - normal conquest
+	werror("Avlonya: %O\n", provincial_unrest(data, "143", 1)); //Avlonya - nothing surprising, no unrest
+	//werror("Sivas: %O\n", provincial_unrest(data, "329", 1)); //Sivas - active missionary
 }
