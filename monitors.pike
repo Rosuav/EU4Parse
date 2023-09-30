@@ -183,7 +183,7 @@ void watch_game_log(object inot) {
 }
 
 protected void create() {
-	//if (G->G->inotify) G->G->inotify->close(); //Hack. TODO: Either keep the inotify and change the code it calls, or close it and start over.
+	if (G->G->inotify) destruct(G->G->inotify); //Hack. TODO: Either keep the inotify and change the code it calls, or close it and start over.
 	object inot = G->G->inotify = System.Inotify.Instance();
 	string new_file; int nomnomcookie;
 	inot->add_watch(SAVE_PATH, System.Inotify.IN_CLOSE_WRITE | System.Inotify.IN_MOVED_TO | System.Inotify.IN_MOVED_FROM) {
@@ -200,11 +200,11 @@ protected void create() {
 		//3) Watch for any CLOSE_WRITE or MOVED_TO. Wait a little bit. See what the newest file in
 		//   the directory is. Assumes that the directory is quiet apart from what we care about.
 		//Currently using option 1. Change if this causes problems.
-		werror("Inotify: %s %s\n", ([
+		werror("Inotify: %-14s %d %s\n", ([
 			System.Inotify.IN_CLOSE_WRITE: "IN_CLOSE_WRITE",
 			System.Inotify.IN_MOVED_FROM: "IN_MOVED_FROM",
 			System.Inotify.IN_MOVED_TO: "IN_MOVED_TO",
-		])[event] || (string)event, path);
+		])[event] || (string)event, cookie, path);
 		switch (event) {
 			case System.Inotify.IN_CLOSE_WRITE: new_file = path; break;
 			case System.Inotify.IN_MOVED_FROM: if (path == new_file) {new_file = 0; nomnomcookie = cookie;} break;

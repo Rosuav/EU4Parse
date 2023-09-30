@@ -2143,8 +2143,8 @@ protected void create() {
 	mapping write = ([]);
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
-	//werror("Corinth: %O\n", provincial_unrest(data, "4701", 1)); //Corinth - lost 20 years
+	werror("Corinth: %O\n", provincial_unrest(data, "4701", 1)); //Corinth - lost 20 years
 	werror("Atina: %O\n", provincial_unrest(data, "146", 1)); //Atina - normal conquest
 	werror("Avlonya: %O\n", provincial_unrest(data, "143", 1)); //Avlonya - nothing surprising, no unrest
-	//werror("Sivas: %O\n", provincial_unrest(data, "329", 1)); //Sivas - active missionary
+	werror("Sivas: %O\n", provincial_unrest(data, "329", 1)); //Sivas - active missionary
 }
