@@ -396,12 +396,25 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	}
 
 	//More modifier types to incorporate:
-	//- Monuments. Might be hard, since they have restrictions. Can we see in the savefile if they're active?
 	//- Religious modifiers (icons, cults, aspects, etc)
 	//- Government type modifiers (eg march, vassal, colony)
 	//- Naval tradition (which affects trade steering and thus the trade recommendations)
 	//- Being a trade league leader (scaled by the number of members)
 	//- Stability
+
+	foreach (country->owned_provinces, string id) {
+		mapping prov = data->provinces["-" + id];
+		if (prov->great_projects) foreach (prov->great_projects, string project) {
+			mapping proj = data->great_projects[project];
+			if (!(int)proj->?development_tier) continue; //Not upgraded, presumably has no effect (is that always true?)
+			mapping defn = G->CFG->great_projects[project];
+			if (!defn) continue; //In analyze_leviathans, there's a note about this possibility
+			mapping req = defn->can_use_modifiers_trigger;
+			if (sizeof(req) && !describe_requirements(req, prov, country)[1]) continue;
+			mapping active = defn["tier_" + proj->development_tier]; if (!active) continue;
+			_incorporate(data, country, modifiers, L10N(project), active->country_modifiers);
+		}
+	}
 
 	if (country->luck) _incorporate(data, country, modifiers, "Luck", G->CFG->static_modifiers->luck); //Lucky nations (AI-only) get bonuses.
 	if (int innov = threeplace(country->innovativeness)) _incorporate(data, country, modifiers, "Innovativeness", G->CFG->static_modifiers->innovativeness, innov, 100000);
@@ -547,6 +560,17 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		if (type != "own") tolerance = min(tolerance, counmod["tolerance_of_" + type + "s_capacity"]);
 		if (tolerance > 0) _incorporate(data, prov, modifiers, L10N("tolerance"), G->CFG->static_modifiers->tolerance, tolerance, 1000);
 		if (tolerance < 0) _incorporate(data, prov, modifiers, L10N("intolerance"), G->CFG->static_modifiers->intolerance, tolerance, 1000);
+	}
+	//TODO: Fold this in with the equivalent block in all_country_modifiers()
+	if (prov->great_projects) foreach (prov->great_projects, string project) {
+		mapping proj = data->great_projects[project];
+		if (!(int)proj->?development_tier) continue; //Not upgraded, presumably has no effect (is that always true?)
+		mapping defn = G->CFG->great_projects[project];
+		if (!defn) continue; //In analyze_leviathans, there's a note about this possibility
+		mapping req = defn->can_use_modifiers_trigger;
+		if (sizeof(req) && !describe_requirements(req, prov, country)[1]) continue;
+		mapping active = defn["tier_" + proj->development_tier]; if (!active) continue;
+		_incorporate(data, prov, modifiers, L10N(project), active->province_modifiers);
 	}
 	return prov->all_province_modifiers = modifiers;
 }
