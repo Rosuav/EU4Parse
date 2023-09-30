@@ -1330,9 +1330,9 @@ int|array(int|array(string)) provincial_unrest(mapping data, string provid, int|
 		if (arrayp(entry)) entry = `|(@entry); //Fold them all together; really we only care about the presence of particular attributes.
 		if (!entry->owner) continue;
 		owner_change = (int)key;
-		if (entry->add_core) owner_change = -1; //Hypothesis: If you got core on a province at the same time as gaining ownership, no separatism?
+		if (entry->add_core) owner_change = -1; //Hypothesis #2: If you got core on a province at the same time as gaining ownership, no separatism?
 	}
-	//Additional hypothesis, not currently tested: If prov->history->add_core is/has the current owner, no separatism.
+	//Hypothesis #3, not currently tested: If prov->history->add_core is/has the current owner, no separatism.
 	int nationalism = owner_change + years - (int)data->date;
 	//Note that, in theory, this could incorporate G->CFG->static_modifiers->nationalism for
 	//each year of nationalism. For now though, we just have this hard-coded.
@@ -2154,4 +2154,5 @@ protected void create() {
 	werror("Atina: %O\n", provincial_unrest(data, "146", 1)); //Atina - normal conquest
 	werror("Avlonya: %O\n", provincial_unrest(data, "143", 1)); //Avlonya - nothing surprising, no unrest
 	werror("Constantinople: %O\n", provincial_unrest(data, "151", 1));
+	werror("Divrigi: %O\n", provincial_unrest(data, "4310", 1)); //Integrated vassal
 }
