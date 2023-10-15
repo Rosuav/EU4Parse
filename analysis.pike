@@ -1686,8 +1686,8 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 					}
 					case "edict_feudal_de_jure_law": {
 						//Necessary when net unrest is above -5
-						//Not sure where unrest is stored. It's probably in separate pieces, like
-						//the whiskey wasn't.
+						int unrest = provincial_unrest(data, provid);
+						if (unrest > -5000) unnecessary = 0;
 						break;
 					}
 					case "religious_tolerance_state_edict": //Special age ability if you have the right govt reform
@@ -2150,9 +2150,7 @@ protected void create() {
 	mapping write = ([]);
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
-	werror("Corinth: %O\n", provincial_unrest(data, "4701", 1)); //Corinth - lost 20 years
-	werror("Atina: %O\n", provincial_unrest(data, "146", 1)); //Atina - normal conquest
-	werror("Avlonya: %O\n", provincial_unrest(data, "143", 1)); //Avlonya - nothing surprising, no unrest
-	werror("Constantinople: %O\n", provincial_unrest(data, "151", 1));
-	werror("Divrigi: %O\n", provincial_unrest(data, "4310", 1)); //Integrated vassal
+	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
+	werror("Prag: %O\n", provincial_unrest(data, "266", 1));
+	werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
 }
