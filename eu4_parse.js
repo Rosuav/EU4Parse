@@ -56,7 +56,7 @@ function cell_compare(sortcol, direction, is_numeric) { //direction s/be 1 or -1
 
 //To be functional, a sortable MUST have an ID. It may have other attrs.
 const sort_selections = { };
-function numeric_sort_header(h) {return typeof h === "string" && h[0] === '#';}
+function numeric_sort_header(h) {return (typeof h === "string" && h[0] === '#') || h?.dataset?.numeric;}
 function sortable(attrs, headings, rows) {
 	if (!attrs || !attrs.id) console.error("BAD SORTABLE, NEED ID", attrs, headings, rows);
 	if (typeof headings === "string") headings = headings.split(" ");
@@ -535,7 +535,7 @@ section("badboy_hatred", "Badboy", "Aggressive Expansion (Badboy)", state => {
 		SUMMARY("Badboy Haters (" + hater_count + ")"),
 		!hater_count && "Nobody is in a position to join a coalition against you.",
 		sortable({id: "badboyhaters", border: "1"},
-			["Opinion", ABBR({title: "Aggressive Expansion"}, "Badboy"), "Improv", "Country", "Notes"],
+			["#Opinion", ABBR({title: "Aggressive Expansion", "data-numeric": 1}, "Badboy"), "#Improv", "Country", "Notes"],
 			haters,
 		),
 	];
@@ -561,7 +561,7 @@ section("unguarded_rebels", "Rebels", "Unguarded rebels", state => {
 section("subjects", "Subjects", "Subject nations", state => [
 	SUMMARY("Subject nations (" + state.subjects.length + ")"),
 	sortable({id: "subject_nations", border: "1"},
-		["Country", "Type", "Liberty", "Opinion", "Improved", "Since", "Integrate?"],
+		["Country", "Type", "#Liberty", "#Opinion", "#Improved", "Since", "Integrate?"],
 		state.subjects.map(subj => TR([
 			TD(COUNTRY(subj.tag)),
 			TD(subj.type),
