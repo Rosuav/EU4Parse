@@ -132,7 +132,9 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			if (!scope->ledger->lastmonthincometable) return 0; //No idea why, but sometimes this is null. I guess we don't have data??
 			return threeplace(scope->ledger->lastmonthincometable[2]) * 1000 / threeplace(scope->ledger->lastmonthincome)
 				>= threeplace(value);
+		case "land_maintenance": return threeplace(scope->land_maintenance) >= threeplace(value);
 		case "has_disaster": return 0; //TODO: Where are current disasters listed?
+		case "num_of_continents": return `+(@(array(int))scope->continent) >= (int)value;
 		case "religion": return scope->religion == value;
 		case "religion_group":
 			//Calculated slightly backwards; instead of asking what religion group the
@@ -141,6 +143,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			//that list.
 			return !undefinedp(G->CFG->religion_definitions[value][scope->religion]);
 		case "dominant_religion": return scope->dominant_religion == resolve_scope(data, scopes, value, "dominant_religion");
+		case "religious_unity": return threeplace(scope->religious_unity) >= threeplace(value);
 		case "technology_group": return scope->technology_group == value;
 		case "primary_culture": return scope->primary_culture == value;
 		case "culture_group":
@@ -168,6 +171,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return 0;
 		case "has_idea": return has_value(enumerate_ideas(scope->active_idea_groups)->id, value);
 		case "has_idea_group": return !undefinedp(scope->active_idea_groups[value]);
+		case "full_idea_group": return scope->active_idea_groups[?value] == "7";
 		case "adm_tech": case "dip_tech": case "mil_tech":
 			return (int)scope->technology[type] >= (int)value;
 		case "uses_piety":
@@ -190,6 +194,11 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (scope->tag[0] == 'C' && !sizeof((multiset)(array)scope->tag[1..] - (multiset)(array)"012345789")) == value;
 		case "is_revolutionary": return all_country_modifiers(data, scope)->revolutionary;
 		case "is_emperor": return (data->empire->emperor == scope->tag) == value;
+		case "is_elector": return has_value(data->empire->electors || ({ }), scope->tag);
+		case "is_part_of_hre": //For countries, equivalent to asking "is the capital_scope part of the HRE?"
+			return (scope->capital_scope || scope)->hre;
+		case "hre_religion_locked": return (int)data->hre_religion_status == (int)value; //TODO: Check if this is correct (post-league-war)
+		case "hre_religion": return 0; //FIXME: Where is this stored, post-league-war?
 		case "num_of_cities": return (int)scope->num_of_cities >= (int)value;
 		case "owns": return has_value(scope->owned_provinces, value);
 		case "has_mission": {
@@ -204,6 +213,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "is_revolutionary_republic_trigger":
 			return has_value(scope->government->reform_stack->reforms, "revolutionary_republic_reform") ||
 				has_value(scope->government->reform_stack->reforms, "junior_revolutionary_republic_reform");
+		case "prestige": return threeplace(scope->prestige) >= threeplace(value);
 		//Province scope.
 		case "province_id": return (int)scope->id == (int)value;
 		case "development": {
@@ -241,6 +251,13 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		//Possibly universal scope
 		case "has_dlc": return has_value(data->dlc_enabled, value);
 		case "has_global_flag": return !undefinedp(data->flags[value]);
+		case "had_global_flag": {
+			string date = data->flags[value->flag];
+			if (!date) return 0; //Don't have the flag, so we haven't had it for X days
+			object today = calendar(data->date);
+			int days; catch {days = today->distance(calendar(date)) / today;};
+			return days >= (int)value->days;
+		}
 		case "current_age": return data->current_age == value;
 		case "always": return value; //"always = no" blocks everything
 		//Minor point of confusion here. As well as "exists = SPA" to test whether Spain exists,
@@ -257,6 +274,8 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		default:
 			//Switching to a specific province is done by giving its (numeric) ID.
 			if ((int)type) return trigger_matches(data, scopes + ({data->provinces["-" + type]}), "AND", value);
+			//Switching to a specific country, similarly, with tag.
+			if (data->countries[type]) return trigger_matches(data, scopes + ({data->countries[type]}), "AND", value);
 			if (DEBUG_TRIGGER_MATCHES) werror("Unknown trigger %O = %O\n", type, value);
 			return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
 	}
