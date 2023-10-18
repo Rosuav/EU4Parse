@@ -316,9 +316,8 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (array ideaids = country->custom_national_ideas) {
 		//First, figure out how many ideas you have. We assume that, if you have
 		//custom ideas, you don't also have a country idea set; which means that the
-		//ideas listed are exclusively ones from idea sets. On the assumption that
-		//you get one national idea for every three currently-held unlockable ideas
-		//(which may not be true if an idea set is removed), sum them and calculate.
+		//ideas listed are exclusively ones from idea sets. You get one national idea
+		//for every three currently-held unlockable ideas; sum them and calculate.
 		int idea_count = `+(0, @(array(int))filter(values(country->active_idea_groups), stringp));
 		if (idea_count < 21)
 			//You don't have all the ideas. What you have is the first N ideas,
