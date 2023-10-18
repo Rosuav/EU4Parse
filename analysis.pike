@@ -336,6 +336,9 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 			_incorporate(data, country, modifiers, "Custom idea - " + L10N(defn->id), defn, (int)idea->level, 1);
 		}
 	}
+	int stab = (int)country->stability;
+	if (stab > 0) _incorporate(data, country, modifiers, L10N("positive_stability"), G->CFG->static_modifiers->positive_stability, stab, 1);
+	if (stab < 0) _incorporate(data, country, modifiers, L10N("negative_stability"), G->CFG->static_modifiers->negative_stability, stab, 1);
 	_incorporate_all(data, country, modifiers, "Policy", G->CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
 	_incorporate_all(data, country, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
 	array tradebonus = G->CFG->trade_goods[Array.arrayify(country->traded_bonus)[*]];
@@ -345,9 +348,6 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	_incorporate(data, country, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
 	_incorporate(data, country, modifiers, L10N("war_exhaustion"), G->CFG->static_modifiers->war_exhaustion, threeplace(country->war_exhaustion), 1000);
 	_incorporate(data, country, modifiers, L10N("over_extension"), G->CFG->static_modifiers->over_extension, threeplace(country->overextension_percentage), 1000);
-	int stab = (int)country->stability;
-	if (stab > 0) _incorporate(data, country, modifiers, L10N("positive_stability"), G->CFG->static_modifiers->positive_stability, stab, 1);
-	if (stab < 0) _incorporate(data, country, modifiers, L10N("negative_stability"), G->CFG->static_modifiers->negative_stability, stab, 1);
 	int relig_unity = min(max(threeplace(country->religious_unity), 0), 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->religious_unity, relig_unity, 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->inverse_religious_unity, 1000 - relig_unity, 1000);
