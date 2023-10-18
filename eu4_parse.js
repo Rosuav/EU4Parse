@@ -546,7 +546,7 @@ section("unguarded_rebels", "Rebels", "Unguarded rebels", state => {
 	const factions = state.unguarded_rebels.map(faction => TR([
 		TD(faction.name),
 		TD({class: faction.progress >= 80 ? max = "interesting2" : "interesting1"}, faction.progress + "%"),
-		TD(UL({style: "margin: 0"}, faction.provinces.map(p => LI(PROV(p))))),
+		TD(UL({style: "margin: 0"}, faction.provinces.map(p => LI([PROV(p.id), "(" + threeplace(p.unrest) + ")"])))),
 	]));
 	max_interesting.unguarded_rebels = max ? 2 : state.unguarded_rebels.length ? 1 : 0;
 	return [
