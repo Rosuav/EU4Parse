@@ -578,6 +578,21 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		mapping active = defn["tier_" + proj->development_tier]; if (!active) continue;
 		_incorporate(data, prov, modifiers, L10N(project), active->province_modifiers);
 	}
+
+	string cul = prov->culture, cul_modifier = "non_accepted_culture";
+	if (cul == country->primary_culture || has_value(Array.arrayify(country->accepted_culture), cul))
+		cul_modifier = "same_culture"; //This doesn't actually exist - there seem to be no "accepted culture" modifiers
+	else {
+		//What if it's in your culture group?
+		foreach (G->CFG->culture_definitions; string group; mapping info)
+			if (info[country->primary_culture] && info[cul])
+				//Same group. If you're empire rank, that counts as accepted.
+				cul_modifier = country->government_rank == "3" ? "same_culture" : "same_culture_group";
+	}
+	_incorporate(data, prov, modifiers, L10N(cul_modifier), G->CFG->static_modifiers[cul_modifier]);
+	//TODO: accepted_culture_demoted (time-delay, possibly decaying, after unaccepting a culture)
+	//TODO: non_accepted_culture_republic (additional modifier if you're a republic)
+
 	return prov->all_province_modifiers = modifiers;
 }
 
@@ -1324,6 +1339,11 @@ int|array(int|array(string)) provincial_unrest(mapping data, string provid, int|
 	unrest += counmod->global_unrest + provmod->local_unrest;
 	sources += counmod->_sources->global_unrest;
 	sources += provmod->_sources->local_unrest;
+	if (prov->religion == "catholic" && country->religion == "catholic" && counmod->unrest_catholic_provinces) {
+		//An unusual modifier, and specific to Catholic provinces in Catholic countries.
+		unrest += counmod->unrest_catholic_provinces;
+		sources += counmod->_sources->unrest_catholic_provinces;
+	}
 	//Separatism is a bit harder to calculate. This could theoretically be incorporated
 	//into all_province_modifiers(), but it's notably more costly than other things, and
 	//as of 20230930 it only affects unrest.

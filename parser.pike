@@ -91,7 +91,7 @@ mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|vo
 			}
 			return ({"string", replace(lit, "\\\\", "\\")});
 		}
-		if (array digits = data->sscanf("%[-0-9.]")) {
+		if (array digits = data->sscanf("%*[+]%[-0-9.]")) {
 			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
 			return ({"string", digits[0]});
 		}
