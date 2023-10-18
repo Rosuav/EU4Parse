@@ -227,6 +227,7 @@ class GameConfig {
 	mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
 	mapping tradenode_definitions, great_projects, climates, opinion_modifiers, ruler_personalities;
 	mapping advisor_definitions, religion_definitions, unit_definitions, culture_definitions;
+	mapping golden_bulls;
 	array military_tech_levels, tradenode_upstream_order, custom_ideas;
 	mapping building_types; array building_id;
 	mapping(string:string) manufactories = ([]); //Calculated from building_types
@@ -593,6 +594,7 @@ log = \"PROV-TERRAIN-END\"
 		advisor_definitions = parse_config_dir("/common/advisortypes");
 		culture_definitions = parse_config_dir("/common/cultures");
 		religion_definitions = parse_config_dir("/common/religions");
+		golden_bulls = parse_config_dir("/common/golden_bulls");
 		great_projects = parse_config_dir("/common/great_projects");
 		ruler_personalities = parse_config_dir("/common/ruler_personalities");
 		retain_map_indices = 1;

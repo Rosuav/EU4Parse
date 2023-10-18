@@ -311,7 +311,8 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	//it doesn't say which ones you have. I think the last three are the traditions and
 	//ambition and the first seven are the ideas themselves, but we'll have to count up
 	//the regular ideas and see how many to apply. It's possible that that would be out
-	//of sync, but it's unlikely. TODO: Test what happens if you remove an idea group.
+	//of sync, but it's unlikely. (If you remove an idea group, you lose national ideas
+	//corresponding to the number of removed ideas.)
 	if (array ideaids = country->custom_national_ideas) {
 		//First, figure out how many ideas you have. We assume that, if you have
 		//custom ideas, you don't also have a country idea set; which means that the
@@ -502,6 +503,11 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		//What is relig->country_as_secondary used for? Syncretic?
 		//TODO: Also check Muslim schools for their attributes
 	}
+	//Additional religion-specific information.
+	mapping rel = data->religion_instance_data[country->religion] || ([]);
+	if (string gb = rel->papacy->?golden_bull) _incorporate(data, country, modifiers, L10N(gb), G->CFG->golden_bulls[gb]);
+	//TODO: Defender of the Faith? Crusade? Curia controller? Do these get listed as their
+	//own modifiers or do we need to pick them up from here?
 	return country->all_country_modifiers = modifiers;
 }
 
