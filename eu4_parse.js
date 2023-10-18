@@ -999,8 +999,12 @@ on("click", ".show_unrest", e => {
 	console.log(unrest);
 	replace_content("#detailsmain", [
 		P(["Unrest in ", PROV(provid), " ",
-			B(unrest.unrest)]),
-		UL(unrest.sources.map(s => LI(s))),
+			B(threeplace(unrest.unrest))]),
+		UL(unrest.sources.map(s => {
+			const m = /(.*): (-?[0-9]+)$/.exec(s); //It's probably not worth reworking things to have a description and number
+			console.log(m);
+			return LI([m[1], ": ", SPAN({style: "font-weight: bold; color: " + (m[2] < 0 ? "green" : "red")}, threeplace(m[2]))]);
+		})),
 	]);
 	replace_content("#detailsdlg h3", "Sources of unrest");
 	DOM("#detailsdlg").showModal();
