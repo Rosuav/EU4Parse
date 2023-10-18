@@ -453,19 +453,20 @@ log = \"PROV-TERRAIN-END\"
 		foreach (idea_definitions; string grp; mapping group) {
 			array basic_ideas = ({ }), pos = ({ });
 			mapping tidied = ([]);
+			string grpdesc = L10n[grp] || grp; //Not using L10N() since we might not be in G->CFG yet
 			foreach (group; string id; mixed idea) {
 				if (!mappingp(idea)) continue;
 				int idx = m_delete(idea, "_index");
 				switch (id) {
 					case "start": case "bonus":
-						idea->desc = grp + " (" + id + ")";
+						idea->desc = grpdesc + " (" + id + ")";
 						tidied[id] = idea;
 						break;
 					case "trigger": case "free": case "category": case "ai_will_do":
 						break; //Ignore these attributes, they're not actual ideas
 					default:
 						idea->id = id;
-						idea->desc = grp + ": " + id;
+						idea->desc = grpdesc + ": " + (L10n[id] || id);
 						basic_ideas += ({idea});
 						pos += ({idx});
 				}

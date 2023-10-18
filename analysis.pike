@@ -541,7 +541,7 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	_incorporate(data, prov, modifiers, "Climate", G->CFG->static_modifiers[G->CFG->province_info[(string)id]->climate]);
 	if (prov->hre) {
 		foreach (Array.arrayify(data->empire->passed_reform), string reform)
-			_incorporate(data, prov, modifiers, "HRE province (" + L10N(reform) + ")", G->CFG->imperial_reforms[reform]->?province);
+			_incorporate(data, prov, modifiers, "HRE province (" + L10N(reform + "_province") + ")", G->CFG->imperial_reforms[reform]->?province);
 	}
 	_incorporate(data, prov, modifiers, "Trade good: " + prov->trade_goods, G->CFG->trade_goods[prov->trade_goods]->?province);
 	//How do we know if it's a city or not? This should be applied only if it's a fully-developed province, not a colony.
