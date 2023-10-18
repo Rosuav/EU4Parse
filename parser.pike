@@ -265,7 +265,7 @@ class GameConfig {
 		array lines = utf8_to_string("#" + data) / "\n"; //Hack: Pretend that the heading line is a comment
 		foreach (lines, string line) {
 			sscanf(line, "%s#", line);
-			sscanf(line, " %s:%*d \"%s\"", string key, string val);
+			sscanf(line, " %s:%*[0-9 ]\"%s\"", string key, string val);
 			if (key && val) L10n[key] = val;
 		}
 	}
