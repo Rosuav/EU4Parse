@@ -75,6 +75,7 @@ string resolve_scope(mapping data, array(mapping) scopes, string value, string|v
 //Triggers are tested on scopes[-1], and PREV= will switch to scopes[-2].
 //What happens if you do "PREV = { PREV = { ... } }" ? Should we shorten the scopes array
 //or duplicate scopes[-2] to the end of it?
+int(1bit) DEBUG_TRIGGER_MATCHES = 0;
 int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixed value) {
 	mapping scope = scopes[-1];
 	switch (type) {
@@ -256,6 +257,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		default:
 			//Switching to a specific province is done by giving its (numeric) ID.
 			if ((int)type) return trigger_matches(data, scopes + ({data->provinces["-" + type]}), "AND", value);
+			if (DEBUG_TRIGGER_MATCHES) werror("Unknown trigger %O = %O\n", type, value);
 			return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
 	}
 	
