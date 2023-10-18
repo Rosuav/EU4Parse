@@ -221,7 +221,7 @@ class GameConfig {
 	array config_dirs;
 	mapping icons = ([]), textcolors = ([]), map_areas = ([]), map_regions = ([]);
 	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]);
-	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers;
+	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers, triggered_modifiers;
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
 	mapping cot_definitions, state_edicts, holy_orders, terrain_definitions, imperial_reforms;
 	mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
@@ -502,6 +502,7 @@ log = \"PROV-TERRAIN-END\"
 		estate_privilege_definitions = parse_config_dir("/common/estate_privileges");
 		reform_definitions = parse_config_dir("/common/government_reforms");
 		static_modifiers = parse_config_dir("/common/static_modifiers");
+		triggered_modifiers = parse_config_dir("/common/triggered_modifiers");
 		opinion_modifiers = parse_config_dir("/common/opinion_modifiers");
 		retain_map_indices = 1;
 		trade_goods = parse_config_dir("/common/tradegoods");

@@ -144,7 +144,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "primary_culture": return scope->primary_culture == value;
 		case "culture_group":
 			//Checked the same slightly-backwards way that religion group is.
-			return !undefinedp(G->CFG->culture_definitions[value][scope->primary_culture]);
+			return !undefinedp(G->CFG->culture_definitions[value][?scope->primary_culture]);
 		case "has_country_modifier": case "has_ruler_modifier":
 			//Hack: I'm counting ruler modifiers the same way as country modifiers.
 			return has_value(Array.arrayify(scope->modifier)->modifier, value);
@@ -507,7 +507,22 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (string gb = rel->papacy->?golden_bull) _incorporate(data, country, modifiers, L10N(gb), G->CFG->golden_bulls[gb]);
 	//TODO: Defender of the Faith? Crusade? Curia controller? Do these get listed as their
 	//own modifiers or do we need to pick them up from here?
-	return country->all_country_modifiers = modifiers;
+
+	//Triggered modifiers. Some of these might be affected by other country modifiers,
+	//so we stash the ones we have so far. This might mean we get inaccurate results
+	//(if one triggered modifier affects another), but at least we don't get infinite
+	//recursion.
+	country->all_country_modifiers = modifiers;
+	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
+		if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) continue;
+		if (!trigger_matches(data, ({country}), "AND", mod->trigger)) continue;
+		//Disabled for now; need to get a lot more trigger_matches clauses.
+		//At the moment, I'd rather have no triggered modifiers at all than
+		//have a ton of false positives.
+		//_incorporate(data, country, modifiers, L10N(id), mod);
+		//werror("Triggered Modifier: %O %O\n", id, mod);
+	}
+	return modifiers;
 }
 
 mapping(string:int) all_province_modifiers(mapping data, int id) {
@@ -2179,4 +2194,7 @@ protected void create() {
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
 	werror("Prag: %O\n", provincial_unrest(data, "266", 1));
 	werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
+	mapping country = data->countries[data->players_countries[1]];
+	m_delete(country, "all_country_modifiers");
+	all_country_modifiers(data, country);
 }
