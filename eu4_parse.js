@@ -29,9 +29,9 @@ document.body.appendChild(replace_content(null, DIALOG({id: "tiledviewdlg"}, SEC
 	HEADER([H3("Jump to section"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
 	DIV({id: "tiledviewmain"}),
 ]))));
-document.body.appendChild(replace_content(null, DIALOG({id: "relationsdlg"}, SECTION([
+document.body.appendChild(replace_content(null, DIALOG({id: "detailsdlg"}, SECTION([
 	HEADER([H3("Detailed relations breakdown"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
-	DIV({id: "relationsmain"}),
+	DIV({id: "detailsmain"}),
 ]))));
 fix_dialogs({close_selector: ".dialog_cancel,.dialog_close", click_outside: "formless"});
 
@@ -546,7 +546,10 @@ section("unguarded_rebels", "Rebels", "Unguarded rebels", state => {
 	const factions = state.unguarded_rebels.map(faction => TR([
 		TD(faction.name),
 		TD({class: faction.progress >= 80 ? max = "interesting2" : "interesting1"}, faction.progress + "%"),
-		TD(UL({style: "margin: 0"}, faction.provinces.map(p => LI([PROV(p.id), "(" + threeplace(p.unrest) + ")"])))),
+		TD(UL({style: "margin: 0"}, faction.provinces.map(p => {
+			prov_unrest[p.id] = p;
+			return LI({"data-provid": p.id}, [PROV(p.id), BUTTON({class: "show_unrest"}, threeplace(p.unrest))]);
+		}))),
 	]));
 	max_interesting.unguarded_rebels = max ? 2 : state.unguarded_rebels.length ? 1 : 0;
 	return [
@@ -969,7 +972,7 @@ on("click", ".sorthead", e => {
 on("click", ".show_relations", e => {
 	const tag = e.match.closest("[data-tag]").dataset.tag;
 	console.log(country_info[tag]);
-	replace_content("#relationsmain", [
+	replace_content("#detailsmain", [
 		P(["Relations with ", COUNTRY(tag), " ",
 			B({title: "Their opinion of you"}, country_info[tag].opinion_theirs),
 			" / ", B({title: "Your opinion of them"}, country_info[tag].opinion_yours)]),
@@ -985,7 +988,22 @@ on("click", ".show_relations", e => {
 			])),
 		),
 	]);
-	DOM("#relationsdlg").showModal();
+	replace_content("#detailsdlg h3", "Detailed relations breakdown");
+	DOM("#detailsdlg").showModal();
+});
+
+let prov_unrest = { };
+on("click", ".show_unrest", e => {
+	const provid = e.match.closest("[data-provid]").dataset.provid;
+	const unrest = prov_unrest[provid];
+	console.log(unrest);
+	replace_content("#detailsmain", [
+		P(["Unrest in ", PROV(provid), " ",
+			B(unrest.unrest)]),
+		UL(unrest.sources.map(s => LI(s))),
+	]);
+	replace_content("#detailsdlg h3", "Sources of unrest");
+	DOM("#detailsdlg").showModal();
 });
 
 let custom_nations = { }, custom_ideas = [], map_colors = [];
