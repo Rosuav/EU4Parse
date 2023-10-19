@@ -209,10 +209,6 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			}
 			return 0;
 		}
-		//TODO: Handle all scripted triggers generically??
-		case "is_revolutionary_republic_trigger":
-			return has_value(scope->government->reform_stack->reforms, "revolutionary_republic_reform") ||
-				has_value(scope->government->reform_stack->reforms, "junior_revolutionary_republic_reform");
 		case "prestige": return threeplace(scope->prestige) >= threeplace(value);
 		//Province scope.
 		case "province_id": return (int)scope->id == (int)value;
@@ -276,6 +272,16 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			if ((int)type) return trigger_matches(data, scopes + ({data->provinces["-" + type]}), "AND", value);
 			//Switching to a specific country, similarly, with tag.
 			if (data->countries[type]) return trigger_matches(data, scopes + ({data->countries[type]}), "AND", value);
+			if (mapping st = G->CFG->scripted_triggers[type]) {
+				//Scripted triggers can be called in two ways: "st = yes/no" and
+				//"st = { ...args... }". I don't think there's a way to internally
+				//negate the version with arguments (use "NOT = { st = { ... } }").
+				mapping args = mappingp(value) ? value : ([]); //Booleans have no args
+				//TODO: Substitute args??
+				int match = trigger_matches(data, scopes, "AND", st);
+				if (value == 0) return !match; //"st = no" negates the result!
+				return match;
+			}
 			if (DEBUG_TRIGGER_MATCHES) werror("Unknown trigger %O = %O\n", type, value);
 			return 1; //Unknown trigger. Let it match, I guess - easier to spot? Maybe?
 	}
@@ -534,6 +540,8 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	//(if one triggered modifier affects another), but at least we don't get infinite
 	//recursion.
 	country->all_country_modifiers = modifiers;
+	#if 0
+	DEBUG_TRIGGER_MATCHES = 1;
 	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
 		if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) continue;
 		if (!trigger_matches(data, ({country}), "AND", mod->trigger)) continue;
@@ -541,8 +549,10 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		//At the moment, I'd rather have no triggered modifiers at all than
 		//have a ton of false positives.
 		//_incorporate(data, country, modifiers, L10N(id), mod);
-		//werror("Triggered Modifier: %O %O\n", id, mod);
+		werror("Triggered Modifier: %s %O\n", id, L10N(id));
 	}
+	DEBUG_TRIGGER_MATCHES = 0;
+	#endif
 	return modifiers;
 }
 
@@ -2213,9 +2223,15 @@ protected void create() {
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
-	werror("Prag: %O\n", provincial_unrest(data, "266", 1));
-	werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
+	//werror("Prag: %O\n", provincial_unrest(data, "266", 1));
+	//werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
 	mapping country = data->countries[data->players_countries[1]];
-	m_delete(country, "all_country_modifiers");
-	all_country_modifiers(data, country);
+	//m_delete(country, "all_country_modifiers");
+	//all_country_modifiers(data, country);
+	DEBUG_TRIGGER_MATCHES = 1;
+	mapping mod = G->CFG->triggered_modifiers->tm_md_defender_of_faith;
+	if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) werror("Not potential\n");
+	else if (!trigger_matches(data, ({country}), "AND", mod->trigger)) werror("Not trigger\n");
+	else werror("Triggered Modifier active!\n");
+	DEBUG_TRIGGER_MATCHES = 0;
 }
