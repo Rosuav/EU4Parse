@@ -58,6 +58,17 @@ object calendar(string date) {
 	return Calendar.Gregorian.Day(year, mon, day);
 }
 
+//Substitute string args into strings. Currently does not support the full "and parse another
+//entire block of code" substitution form.
+mixed substitute_args(mixed trigger, mapping args) {
+	if (stringp(trigger)) return replace(trigger, args);
+	if (arrayp(trigger)) return substitute_args(trigger[*], args);
+	if (mappingp(trigger)) return mkmapping(
+		substitute_args(indices(trigger)[*], args),
+		substitute_args(values(trigger)[*], args));
+	return trigger; //Anything unknown presumably can't have replacements done (eg integers).
+}
+
 //Resolve a relative reference to the actual value. See https://eu4.paradoxwikis.com/Scopes for concepts and explanation.
 string resolve_scope(mapping data, array(mapping) scopes, string value, string|void attr) {
 	if (!attr) attr = "tag";
@@ -109,6 +120,8 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return 0;
 		case "NOT": return !trigger_matches(data, scopes, "OR", value);
 		case "root": return trigger_matches(data, scopes + ({scope}), "AND", value);
+		case "custom_trigger_tooltip": return trigger_matches(data, scopes, "AND", value);
+		case "tooltip": return 1; //Inside custom_trigger_tooltip is a tooltip that visually replaces the other effects.
 		//Okay, now for the actual triggers. Country scope.
 		case "has_reform": return has_value(scope->government->reform_stack->reforms, value);
 		case "any_owned_province":
@@ -154,21 +167,36 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return has_value(Array.arrayify(scope->modifier)->modifier, value);
 		case "has_country_flag":
 			return !!scope->flags[value]; //Flags are mapped to the date when they happened. We just care about presence.
+		case "had_country_flag": { //Oh, but what if we don't just care about presence?
+			string date = scope->flags[value->flag];
+			if (!date) return 0; //Don't have the flag, so we haven't had it for X days
+			object today = calendar(data->date);
+			int days; catch {days = calendar(date)->distance(today) / today;};
+			return days >= (int)value->days;
+		}
 		case "has_parliament":
 			return all_country_modifiers(data, scope)->has_parliament;
 		case "has_government_attribute": //Government attributes are thrown in with country modifiers for simplicity.
 			return all_country_modifiers(data, scope)[value];
 		case "has_estate":
 			return has_value(Array.arrayify(scope->estate)->type, value);
-		case "has_enabled_estate_action":
-			//This is actually a scripted trigger (managed by scripted effects) that uses
-			//country flags to store the info.
-			return !undefinedp(scope->flags["enable_estate_action_" + value->estate_action]);
 		case "has_estate_privilege":
 			foreach (Array.arrayify(scope->estate), mapping est) {
 				if (has_value(Array.arrayify(est->granted_privileges)[*][0], value)) return 1;
 			}
 			return 0;
+		case "estate_influence":
+			foreach (Array.arrayify(scope->estate), mapping est) {
+				if (est->type != value->estate) continue;
+				return threeplace(est->loyalty) >= threeplace(value->influence);
+			}
+			return 0; //Ditto - non-estates aren't loyal to you
+		case "estate_loyalty":
+			foreach (Array.arrayify(scope->estate), mapping est) {
+				if (est->type != value->estate) continue;
+				return est->estimated_milliinfluence >= threeplace(value->influence);
+			}
+			return 0; //If you don't have that estate, its influence isn't above X for any X.
 		case "has_idea": return has_value(enumerate_ideas(scope->active_idea_groups)->id, value);
 		case "has_idea_group": return !undefinedp(scope->active_idea_groups[value]);
 		case "full_idea_group": return scope->active_idea_groups[?value] == "7";
@@ -200,6 +228,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "hre_religion_locked": return (int)data->hre_religion_status == (int)value; //TODO: Check if this is correct (post-league-war)
 		case "hre_religion": return 0; //FIXME: Where is this stored, post-league-war?
 		case "num_of_cities": return (int)scope->num_of_cities >= (int)value;
+		case "num_of_ports": return (int)scope->num_of_ports >= (int)value;
 		case "owns": return has_value(scope->owned_provinces, value);
 		case "has_mission": {
 			foreach (Array.arrayify(scope->country_missions->?mission_slot), array slot) {
@@ -251,7 +280,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			string date = data->flags[value->flag];
 			if (!date) return 0; //Don't have the flag, so we haven't had it for X days
 			object today = calendar(data->date);
-			int days; catch {days = today->distance(calendar(date)) / today;};
+			int days; catch {days = calendar(date)->distance(today) / today;};
 			return days >= (int)value->days;
 		}
 		case "current_age": return data->current_age == value;
@@ -277,8 +306,8 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 				//"st = { ...args... }". I don't think there's a way to internally
 				//negate the version with arguments (use "NOT = { st = { ... } }").
 				mapping args = mappingp(value) ? value : ([]); //Booleans have no args
-				//TODO: Substitute args??
-				int match = trigger_matches(data, scopes, "AND", st);
+				args = mkmapping(sprintf("$%s$", indices(args)[*]), values(args)); //It's easier to include the dollar signs in the mapping
+				int match = trigger_matches(data, scopes, "AND", substitute_args(st, args));
 				if (value == 0) return !match; //"st = no" negates the result!
 				return match;
 			}
@@ -2230,8 +2259,12 @@ protected void create() {
 	//all_country_modifiers(data, country);
 	DEBUG_TRIGGER_MATCHES = 1;
 	mapping mod = G->CFG->triggered_modifiers->tm_md_defender_of_faith;
-	if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) werror("Not potential\n");
-	else if (!trigger_matches(data, ({country}), "AND", mod->trigger)) werror("Not trigger\n");
+	if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) werror("TM: Not potential\n");
+	else if (!trigger_matches(data, ({country}), "AND", mod->trigger)) werror("TM: Not trigger\n");
 	else werror("Triggered Modifier active!\n");
+	mapping info = G->CFG->country_decisions->estate_burghers_grant_admiralship;
+	if (!trigger_matches(data, ({country}), "AND", info->potential)) werror("Decision: Not potential\n");
+	else if (!trigger_matches(data, ({country}), "AND", info->allow)) werror("Decision: Not allow\n");
+	else werror("Decision available!\n");
 	DEBUG_TRIGGER_MATCHES = 0;
 }
