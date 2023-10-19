@@ -9,6 +9,8 @@ varlist: name "=" value {makemapping};
 varlist: varlist name "=" value {addmapping};
 varlist: value {makearray};
 varlist: varlist value {addarray};
+varlist: scripted_trigger {makemapping_st};
+varlist: varlist scripted_trigger {addmapping_st};
 
 name: "string";
 
@@ -17,3 +19,8 @@ value: "string";
 value: "boolean";
 value: "{" varlist "}" {coalesce};
 value: "{" "}" {emptymaparray};
+
+/* Inside a scripted trigger, some weird conditionals can be found.
+I don't understand them so I'm just hanging onto them fairly raw. */
+scripted_trigger: "[" "[" "string" "]" "string" "]" {makescripted_value};
+scripted_trigger: "[" "[" "string" "]" name "=" value "]" {makescripted_namevalue};

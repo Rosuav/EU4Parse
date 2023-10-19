@@ -69,6 +69,14 @@ maparray addmapping(maparray map, mixed name, mixed _, mixed val) {
 maparray makearray(mixed val) {return maparray()->addidx(val);}
 maparray addarray(maparray arr, mixed val) {return arr->addidx(val);}
 mapping emptymaparray() {return ([]);}
+mapping makescripted_value(string _1, string _2, mixed cond, string _3, string body, string _4) {
+	return (["_st_cond": cond, "_st_body": body]);
+}
+mapping makescripted_namevalue(string _1, string _2, mixed cond, string _3, string name, string _4, mixed value, string _5) {
+	return (["_st_cond": cond, "_st_body": ([name: value])]);
+}
+maparray makemapping_st(mixed val) {return makemapping("_st", "=", val);}
+maparray addmapping_st(maparray map, mixed val) {return addmapping(map, "_st", "=", val);}
 
 mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|void debug) {
 	if (stringp(data)) data = Stdio.Buffer(data); //NOTE: Restricted to eight-bit data. Since EU4 uses ISO-8859-1, that's not a problem. Be aware for future.
@@ -95,7 +103,7 @@ mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|vo
 			if (array hex = digits[0] == "0" && data->sscanf("x%[0-9a-fA-F]")) return ({"string", "0x" + hex[0]}); //Or should this be converted to decimal?
 			return ({"string", digits[0]});
 		}
-		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:@]")) { //Include non-ASCII characters as letters
+		if (array|string word = data->sscanf("%[0-9a-zA-Z_'\x81-\xFF:@$]")) { //Include non-ASCII characters as letters
 			word = word[0];
 			//Unquoted tokens like institution_events.2 should be atoms, not atom-followed-by-number
 			if (array dotnumber = data->sscanf(".%[0-9]")) word += "." + dotnumber[0];
@@ -227,7 +235,7 @@ class GameConfig {
 	mapping cb_types, wargoal_types, estate_agendas, country_decisions, country_missions;
 	mapping tradenode_definitions, great_projects, climates, opinion_modifiers, ruler_personalities;
 	mapping advisor_definitions, religion_definitions, unit_definitions, culture_definitions;
-	mapping golden_bulls;
+	mapping golden_bulls, scripted_triggers;
 	array military_tech_levels, tradenode_upstream_order, custom_ideas;
 	mapping building_types; array building_id;
 	mapping(string:string) manufactories = ([]); //Calculated from building_types
@@ -504,6 +512,7 @@ log = \"PROV-TERRAIN-END\"
 		static_modifiers = parse_config_dir("/common/static_modifiers");
 		triggered_modifiers = parse_config_dir("/common/triggered_modifiers");
 		opinion_modifiers = parse_config_dir("/common/opinion_modifiers");
+		scripted_triggers = parse_config_dir("/common/scripted_triggers");
 		retain_map_indices = 1;
 		trade_goods = parse_config_dir("/common/tradegoods");
 		institutions = parse_config_dir("/common/institutions");
