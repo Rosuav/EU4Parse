@@ -157,6 +157,10 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return !undefinedp(G->CFG->religion_definitions[value][scope->religion]);
 		case "dominant_religion": return scope->dominant_religion == resolve_scope(data, scopes, value, "dominant_religion");
 		case "religious_unity": return threeplace(scope->religious_unity) >= threeplace(value);
+		case "is_defender_of_faith": {
+			mapping rel = data->religion_instance_data[scope->religion] || ([]);
+			return (rel->defender == scope->tag) == value;
+		}
 		case "technology_group": return scope->technology_group == value;
 		case "primary_culture": return scope->primary_culture == value;
 		case "culture_group":
