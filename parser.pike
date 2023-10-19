@@ -228,7 +228,7 @@ class GameConfig {
 	string hash, vanilla_hash; //Not necessarily the same hash that the game uses, but derived from all the same files
 	array config_dirs;
 	mapping icons = ([]), textcolors = ([]), map_areas = ([]), map_regions = ([]);
-	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]);
+	mapping prov_area = ([]), area_region = ([]), prov_colonial_region = ([]), prov_continent = ([]), region_superregion = ([]);
 	mapping idea_definitions, policy_definitions, reform_definitions, static_modifiers, triggered_modifiers;
 	mapping trade_goods, country_modifiers, age_definitions, tech_definitions, institutions;
 	mapping cot_definitions, state_edicts, holy_orders, terrain_definitions, imperial_reforms;
@@ -423,6 +423,11 @@ log = \"PROV-TERRAIN-END\"
 		map_regions = low_parse_savefile("/map/region.txt");
 		foreach (map_regions; string regname; mapping info) {
 			foreach (info->areas || ({ }), string area) area_region[area] = regname;
+		}
+		foreach (low_parse_savefile("/map/superregion.txt"); string srname; array regions) {
+			//Note that some regions are empty, which - due to syntactic ambiguity
+			//in the edit files - makes them show up as mappings. Ignore them.
+			if (arrayp(regions)) foreach (regions, string reg) region_superregion[reg] = srname;
 		}
 		foreach (low_parse_savefile("/map/continent.txt"); string contname; array|mapping provinces) {
 			if (arrayp(provinces)) foreach (provinces, string id) prov_continent[id] = contname;

@@ -135,6 +135,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (int)scope->capital == (int)value;
 		case "capital_scope": //Check other details about the capital, by switching scope
 			return trigger_matches(data, scopes + ({data->provinces["-" + scope->capital]}), "AND", value);
+		case "is_subject": return !!scope->overlord == value;
 		case "overlord":
 			if (!scope->overlord) return 0;
 			return trigger_matches(data, scopes + ({data->countries[scope->overlord]}), "AND", value);
@@ -166,6 +167,9 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "culture_group":
 			//Checked the same slightly-backwards way that religion group is.
 			return !undefinedp(G->CFG->culture_definitions[value][?scope->primary_culture]);
+		case "stability": return (int)scope->stability >= (int)value;
+		case "corruption": return threeplace(scope->corruption) >= threeplace(value);
+		//case "num_of_loans": // TODO
 		case "has_country_modifier": case "has_ruler_modifier":
 			//Hack: I'm counting ruler modifiers the same way as country modifiers.
 			return has_value(Array.arrayify(scope->modifier)->modifier, value);
@@ -178,6 +182,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			int days; catch {days = calendar(date)->distance(today) / today;};
 			return days >= (int)value->days;
 		}
+		case "check_variable": return (int)scope->variables[?value->which] >= (int)value->value;
 		case "has_parliament":
 			return all_country_modifiers(data, scope)->has_parliament;
 		case "has_government_attribute": //Government attributes are thrown in with country modifiers for simplicity.
@@ -231,6 +236,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (scope->capital_scope || scope)->hre;
 		case "hre_religion_locked": return (int)data->hre_religion_status == (int)value; //TODO: Check if this is correct (post-league-war)
 		case "hre_religion": return 0; //FIXME: Where is this stored, post-league-war?
+		case "hre_reform_passed": return has_value(data->empire->passed_reform, value); //TODO: Check savefile with 0 or 1 reforms passed - do we need to arrayify?
 		case "num_of_cities": return (int)scope->num_of_cities >= (int)value;
 		case "num_of_ports": return (int)scope->num_of_ports >= (int)value;
 		case "owns": return has_value(scope->owned_provinces, value);
@@ -252,6 +258,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "province_has_center_of_trade_of_level": return (int)scope->center_of_trade >= (int)value;
 		case "area": return G->CFG->prov_area[(string)scope->id] == value;
 		case "region": return G->CFG->area_region[G->CFG->prov_area[(string)scope->id]] == value;
+		case "superregion": return G->CFG->region_superregion[G->CFG->area_region[G->CFG->prov_area[(string)scope->id]]] == value;
 		case "colonial_region": return G->CFG->prov_colonial_region[(string)scope->id] == value;
 		case "continent": return G->CFG->prov_continent[(string)scope->id] == value;
 		case "has_province_modifier": return all_province_modifiers(data, (int)scope->id)[value];
@@ -278,6 +285,16 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return 0; //Guess not.
 		}
 		//Possibly universal scope
+		case "has_discovered": {
+			//Can be used at province scope (has_discovered = FRA) or country scope (has_discovered = 123)
+			if (scope->discovered_by)
+				//At province scope. Handle "discovered_by = ROOT" and other notations.
+				return has_value(scope->discovered_by, resolve_scope(data, scopes, value));
+			//At country scope. Assume it's a province ID.
+			mapping prov = data->provinces["-" + value];
+			if (!prov) return 0; //TODO: What if it's not an ID?
+			return has_value(prov->discovered_by, scope->tag);
+		}
 		case "has_dlc": return has_value(data->dlc_enabled, value);
 		case "has_global_flag": return !undefinedp(data->flags[value]);
 		case "had_global_flag": {
@@ -300,6 +317,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			mapping target = data->countries[value];
 			return target && (int)target->num_of_cities;
 		}
+		case "normal_or_historical_nations": return 1 == (int)value; //TODO: Is this in data->gameplaysettings??
 		default:
 			//Switching to a specific province is done by giving its (numeric) ID.
 			if ((int)type) return trigger_matches(data, scopes + ({data->provinces["-" + type]}), "AND", value);
@@ -2262,13 +2280,11 @@ protected void create() {
 	//m_delete(country, "all_country_modifiers");
 	//all_country_modifiers(data, country);
 	DEBUG_TRIGGER_MATCHES = 1;
-	mapping mod = G->CFG->triggered_modifiers->tm_md_defender_of_faith;
-	if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) werror("TM: Not potential\n");
-	else if (!trigger_matches(data, ({country}), "AND", mod->trigger)) werror("TM: Not trigger\n");
-	else werror("Triggered Modifier active!\n");
-	mapping info = G->CFG->country_decisions->estate_burghers_grant_admiralship;
-	if (!trigger_matches(data, ({country}), "AND", info->potential)) werror("Decision: Not potential\n");
-	else if (!trigger_matches(data, ({country}), "AND", info->allow)) werror("Decision: Not allow\n");
-	else werror("Decision available!\n");
+	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
+		string label = "Applicable!";
+		if (mod->potential && !trigger_matches(data, ({country}), "AND", mod->potential)) label = "Not potent.";
+		else if (!trigger_matches(data, ({country}), "AND", mod->trigger)) label = "Not trigger";
+		werror("%s -- Triggered Modifier: %s %O\n", label, id, L10N(id));
+	}
 	DEBUG_TRIGGER_MATCHES = 0;
 }
