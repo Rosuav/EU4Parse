@@ -197,15 +197,15 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "estate_influence":
 			foreach (Array.arrayify(scope->estate), mapping est) {
 				if (est->type != value->estate) continue;
-				return threeplace(est->loyalty) >= threeplace(value->influence);
-			}
-			return 0; //Ditto - non-estates aren't loyal to you
-		case "estate_loyalty":
-			foreach (Array.arrayify(scope->estate), mapping est) {
-				if (est->type != value->estate) continue;
 				return est->estimated_milliinfluence >= threeplace(value->influence);
 			}
 			return 0; //If you don't have that estate, its influence isn't above X for any X.
+		case "estate_loyalty":
+			foreach (Array.arrayify(scope->estate), mapping est) {
+				if (est->type != value->estate) continue;
+				return threeplace(est->loyalty) >= threeplace(value->loyalty);
+			}
+			return 0; //Ditto - non-estates aren't loyal to you
 		case "has_idea": return has_value(enumerate_ideas(scope->active_idea_groups)->id, value);
 		case "has_idea_group": return !undefinedp(scope->active_idea_groups[value]);
 		case "full_idea_group": return scope->active_idea_groups[?value] == "7";
