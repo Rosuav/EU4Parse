@@ -413,11 +413,20 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 			_incorporate(data, country, modifiers, "Custom idea - " + L10N(defn->id), defn, (int)idea->level, 1);
 		}
 	}
+
+	_incorporate_all(data, country, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
+
+	if (data->celestial_empire->emperor == country->tag) {
+		int mandate = threeplace(data->celestial_empire->imperial_influence);
+		if (mandate > 50000) _incorporate(data, country, modifiers, L10N("positive_mandate"), G->CFG->static_modifiers->positive_mandate, mandate - 50000, 50000);
+		if (mandate < 50000) _incorporate(data, country, modifiers, L10N("negative_mandate"), G->CFG->static_modifiers->negative_mandate, 50000 - mandate, 50000);
+		//TODO: Reforms?
+	}
+
 	int stab = (int)country->stability;
 	if (stab > 0) _incorporate(data, country, modifiers, L10N("positive_stability"), G->CFG->static_modifiers->positive_stability, stab, 1);
 	if (stab < 0) _incorporate(data, country, modifiers, L10N("negative_stability"), G->CFG->static_modifiers->negative_stability, stab, 1);
 	_incorporate_all(data, country, modifiers, "Policy", G->CFG->policy_definitions, Array.arrayify(country->active_policy)->policy);
-	_incorporate_all(data, country, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
 	array tradebonus = G->CFG->trade_goods[Array.arrayify(country->traded_bonus)[*]];
 	_incorporate(data, country, modifiers, ("Trading in " + tradebonus->id[*])[*], tradebonus[*]); //TODO: TEST ME
 	_incorporate_all(data, country, modifiers, "Modifier", G->CFG->country_modifiers, Array.arrayify(country->modifier)->modifier);
@@ -2274,7 +2283,8 @@ protected void create() {
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
-	//werror("Prag: %O\n", provincial_unrest(data, "266", 1));
+	werror("702: %O\n", provincial_unrest(data, "702", 1));
+	return;
 	//werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
 	mapping country = data->countries[data->players_countries[1]];
 	//m_delete(country, "all_country_modifiers");
