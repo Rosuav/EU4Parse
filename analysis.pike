@@ -375,7 +375,7 @@ void _incorporate(mapping data, mapping scope, mapping modifiers, string source,
 }
 void _incorporate_all(mapping data, mapping scope, mapping modifiers, string source, mapping definitions, array keys, int|void mul, int|void div) {
 	foreach (Array.arrayify(keys), string key)
-		_incorporate(data, scope, modifiers, sprintf("%s %O", source, L10N(key)), definitions[key], mul, div);
+		_incorporate(data, scope, modifiers, sprintf("%s \"%s\"", source, L10N((string)key)), definitions[key], mul, div);
 }
 mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (mapping cached = country->all_country_modifiers) return cached;
