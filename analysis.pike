@@ -507,7 +507,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	//- Government type modifiers (eg march, vassal, colony)
 	//- Naval tradition (which affects trade steering and thus the trade recommendations)
 	//- Being a trade league leader (scaled by the number of members)
-	//- Stability
+	//- Province Triggered Modifiers (handle them alongside monuments?)
 
 	foreach (country->owned_provinces, string id) {
 		mapping prov = data->provinces["-" + id];
@@ -603,7 +603,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		_incorporate(data, country, modifiers, L10N(country->religion), relig->country);
 		_incorporate(data, country, modifiers, L10N(country->religion), relig & (<
 			"uses_anglican_power", "uses_hussite_power", "uses_church_power", "has_patriarchs",
-			"fervor", "uses_piety", "uses_karma", "uses_isolationism", "uses_judaism_power",
+			"fervor", "uses_piety", "uses_karma", "uses_harmony", "uses_isolationism", "uses_judaism_power",
 			"personal_deity", "fetishist_cult", "ancestors", "authority", "religious_reforms",
 			"doom", "declare_war_in_regency", "can_have_secondary_religion", "fetishist_cult",
 		>));
@@ -616,6 +616,11 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (string gb = rel->papacy->?golden_bull) _incorporate(data, country, modifiers, L10N(gb), G->CFG->golden_bulls[gb]);
 	//TODO: Defender of the Faith? Crusade? Curia controller? Do these get listed as their
 	//own modifiers or do we need to pick them up from here?
+	if (modifiers->uses_harmony) {
+		int harmony = threeplace(country->harmony);
+		if (harmony > 50000) _incorporate(data, country, modifiers, L10N("high_harmony"), G->CFG->static_modifiers->high_harmony, harmony - 50000, 50000);
+		if (harmony < 50000) _incorporate(data, country, modifiers, L10N("low_harmony"), G->CFG->static_modifiers->low_harmony, 50000 - harmony, 50000);
+	}
 
 	//Triggered modifiers. Some of these might be affected by other country modifiers,
 	//so we stash the ones we have so far. This might mean we get inaccurate results
@@ -683,6 +688,7 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	if (prov->owner) {
 		mapping counmod = all_country_modifiers(data, country);
 		//First off, what kind of religious tolerance is this?
+		//TODO: Use "own" if harmonized with religion or group
 		string type = "heathen";
 		if (prov->religion == country->religion) type = "own";
 		else foreach (G->CFG->religion_definitions; string grp; mapping defn) {
@@ -2309,9 +2315,6 @@ protected void create() {
 	mapping country = data->countries[data->player];
 	m_delete(country, "all_country_modifiers");
 	all_country_modifiers(data, country);
-	foreach (Array.arrayify(country->estate), mapping est)
-		werror("%s: %d loyalty, %d influence: %O\n", est->type, threeplace(est->loyalty), est->estimated_milliinfluence, est->influence_sources);
-	return;
 	DEBUG_TRIGGER_MATCHES = 1;
 	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
 		string label = "Applicable!";
