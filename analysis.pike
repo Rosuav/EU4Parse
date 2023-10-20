@@ -685,6 +685,9 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	//TODO: development_scaled (to calculate the actual development cost)
 	//TODO: expanded_infrastructure, centralize_state
 	//TODO: in_state, in_capital_state, coastal, seat_in_parliament
+	//TODO: Syncretic/Secondary religion for Tengri
+	//TODO: Confucian harmonization bonuses
+	//TODO: Sow Discontent (diplomatic action)
 	if (prov->owner) {
 		mapping counmod = all_country_modifiers(data, country);
 		//First off, what kind of religious tolerance is this?
