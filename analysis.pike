@@ -249,6 +249,20 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return 0;
 		}
 		case "prestige": return threeplace(scope->prestige) >= threeplace(value);
+		case "meritocracy": return threeplace(scope->meritocracy) >= threeplace(value); //TODO: Only if you use meritocracy?? Only relevant if you test for "meritocracy = 0".
+		case "adm": case "dip": case "mil": { //Test monarch skills. We cache this in country modifiers.
+			mapping mod = scope->_all_country_modifiers;
+			if (mod) return mod[type] >= (int)value;
+			//Not there yet? Well, we can't call all_country_modifiers or we'll have a loop.
+			//(Though it might be okay given that this won't be needed until estate calculations??)
+			//Duplicate the code, for now.
+			if (!scope->monarch) return 0;
+			mapping monarch = ([]);
+			foreach (sort(indices(scope->history)), string key)
+				monarch = ((int)key && mappingp(scope->history[key]) && (scope->history[key]->monarch || scope->history[key]->monarch_heir)) || monarch;
+			if (arrayp(monarch)) monarch = monarch[0];
+			return (int)monarch[upper_case(type)] >= (int)value;
+		}
 		//Province scope.
 		case "province_id": return (int)scope->id == (int)value;
 		case "development": {
@@ -420,7 +434,9 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		int mandate = threeplace(data->celestial_empire->imperial_influence);
 		if (mandate > 50000) _incorporate(data, country, modifiers, L10N("positive_mandate"), G->CFG->static_modifiers->positive_mandate, mandate - 50000, 50000);
 		if (mandate < 50000) _incorporate(data, country, modifiers, L10N("negative_mandate"), G->CFG->static_modifiers->negative_mandate, 50000 - mandate, 50000);
-		//TODO: Reforms?
+		//TODO: Reforms should affect tributaries too. This only catches the Emperor.
+		foreach (Array.arrayify(data->celestial_empire->passed_reform), string reform)
+			_incorporate(data, country, modifiers, L10N(reform + "_emperor"), G->CFG->imperial_reforms[reform]->?emperor);
 	}
 
 	int stab = (int)country->stability;
@@ -454,9 +470,13 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		//Is there any way to directly look up the monarch details by ID?
 		mapping monarch = ([]);
 		foreach (sort(indices(country->history)), string key)
-			monarch = ((int)key && mappingp(country->history[key]) && country->history[key]->monarch) || monarch;
+			monarch = ((int)key && mappingp(country->history[key]) && (country->history[key]->monarch || country->history[key]->monarch_heir)) || monarch;
+		if (arrayp(monarch)) monarch = monarch[0]; //What does it mean when there are multiple? Check by ID?
 		if (mappingp(monarch->personalities))
 			_incorporate_all(data, country, modifiers, "Ruler -", G->CFG->ruler_personalities, indices(monarch->personalities));
+		modifiers->adm = (int)monarch->ADM;
+		modifiers->dip = (int)monarch->DIP;
+		modifiers->mil = (int)monarch->MIL;
 	}
 
 	//Legitimacy and its alternates
@@ -534,8 +554,9 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 				//It's possible to have the same modifier more than once (eg "Diet Summoned").
 				//Rather than show them all separately, collapse them into "Diet Summoned: 15%".
 				influence[L10N(mod->desc) || "(unknown modifier)"] += threeplace(mod->value);
-			foreach (Array.arrayify(modifiers->_sources[replace(estate->type, "estate_", "") + "_influence_modifier"]), string mod) {
-				sscanf(reverse(mod), "%[0-9] :%s", string value, string desc);
+			foreach (Array.arrayify(modifiers->_sources[replace(estate->type, "estate_", "") + "_influence_modifier"])
+					+ Array.arrayify(modifiers->_sources->all_estate_influence_modifier), string mod) {
+				sscanf(reverse(mod), "%[-0-9] :%s", string value, string desc);
 				influence[reverse(desc)] += (int)reverse(value) * 100; //Just in case they show up more than once
 			}
 			influence["Land share"] = threeplace(estate->territory) * threeplace(estate_defn->influence_from_dev_modifier) / 2000; //Not sure why the "/2" part; the modifier is 1.0 if it scales this way, otherwise larger or smaller numbers.
@@ -545,6 +566,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 				influence[L10N(mod->desc)] = threeplace(mod->influence);
 			}
 			int total_influence = estate->estimated_milliinfluence = `+(@values(influence));
+			estate->influence_sources = influence; //Not quite the same format as _sources elsewhere though
 			string opinion = "neutral";
 			if ((float)estate->loyalty >= 60.0) opinion = "happy";
 			else if ((float)estate->loyalty < 30.0) opinion = "angry";
@@ -2284,11 +2306,12 @@ protected void create() {
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
 	werror("702: %O\n", provincial_unrest(data, "702", 1));
+	mapping country = data->countries[data->player];
+	m_delete(country, "all_country_modifiers");
+	all_country_modifiers(data, country);
+	foreach (Array.arrayify(country->estate), mapping est)
+		werror("%s: %d loyalty, %d influence: %O\n", est->type, threeplace(est->loyalty), est->estimated_milliinfluence, est->influence_sources);
 	return;
-	//werror("Pardubitz: %O\n", provincial_unrest(data, "4724", 1));
-	mapping country = data->countries[data->players_countries[1]];
-	//m_delete(country, "all_country_modifiers");
-	//all_country_modifiers(data, country);
 	DEBUG_TRIGGER_MATCHES = 1;
 	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
 		string label = "Applicable!";
