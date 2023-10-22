@@ -169,7 +169,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return !undefinedp(G->CFG->culture_definitions[value][?scope->primary_culture]);
 		case "stability": return (int)scope->stability >= (int)value;
 		case "corruption": return threeplace(scope->corruption) >= threeplace(value);
-		//case "num_of_loans": // TODO
+		case "num_of_loans": return sizeof(Array.arrayify(scope->loan)) >= (int)value;
 		case "has_country_modifier": case "has_ruler_modifier":
 			//Hack: I'm counting ruler modifiers the same way as country modifiers.
 			return has_value(Array.arrayify(scope->modifier)->modifier, value);
