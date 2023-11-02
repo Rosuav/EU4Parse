@@ -162,6 +162,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			mapping rel = data->religion_instance_data[scope->religion] || ([]);
 			return (rel->defender == scope->tag) == value;
 		}
+		case "has_church_aspect": return has_value(Array.arrayify(scope->church->?aspect), value);
 		case "technology_group": return scope->technology_group == value;
 		case "primary_culture": return scope->primary_culture == value;
 		case "culture_group":
@@ -182,6 +183,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			int days; catch {days = calendar(date)->distance(today) / today;};
 			return days >= (int)value->days;
 		}
+		case "was_tag": return has_value(Array.arrayify(scope->previous_country_tags, value));
 		case "check_variable": return (int)scope->variables[?value->which] >= (int)value->value;
 		case "has_parliament":
 			return all_country_modifiers(data, scope)->has_parliament;
@@ -236,7 +238,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			return (scope->capital_scope || scope)->hre;
 		case "hre_religion_locked": return (int)data->hre_religion_status == (int)value; //TODO: Check if this is correct (post-league-war)
 		case "hre_religion": return 0; //FIXME: Where is this stored, post-league-war?
-		case "hre_reform_passed": return has_value(data->empire->passed_reform, value); //TODO: Check savefile with 0 or 1 reforms passed - do we need to arrayify?
+		case "hre_reform_passed": return has_value(Array.arrayify(data->empire->passed_reform), value); //TODO: Check savefile with 0 or 1 reforms passed - do we need the arrayify?
 		case "num_of_cities": return (int)scope->num_of_cities >= (int)value;
 		case "num_of_ports": return (int)scope->num_of_ports >= (int)value;
 		case "owns": return has_value(scope->owned_provinces, value);
@@ -450,6 +452,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	_incorporate(data, country, modifiers, "Age ability", age[Array.arrayify(country->active_age_ability)[*]][*]); //TODO: Add description
 	_incorporate(data, country, modifiers, L10N("war_exhaustion"), G->CFG->static_modifiers->war_exhaustion, threeplace(country->war_exhaustion), 1000);
 	_incorporate(data, country, modifiers, L10N("over_extension"), G->CFG->static_modifiers->over_extension, threeplace(country->overextension_percentage), 1000);
+	_incorporate_all(data, country, modifiers, "Aspect", G->CFG->church_aspects, Array.arrayify(country->church->?aspect));
 	int relig_unity = min(max(threeplace(country->religious_unity), 0), 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->religious_unity, relig_unity, 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->inverse_religious_unity, 1000 - relig_unity, 1000);
@@ -503,7 +506,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	}
 
 	//More modifier types to incorporate:
-	//- Religious modifiers (icons, cults, aspects, etc)
+	//- Religious modifiers (icons, cults, etc)
 	//- Government type modifiers (eg march, vassal, colony)
 	//- Naval tradition (which affects trade steering and thus the trade recommendations)
 	//- Being a trade league leader (scaled by the number of members)
