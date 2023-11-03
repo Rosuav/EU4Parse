@@ -183,7 +183,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 			int days; catch {days = calendar(date)->distance(today) / today;};
 			return days >= (int)value->days;
 		}
-		case "was_tag": return has_value(Array.arrayify(scope->previous_country_tags, value));
+		case "was_tag": return has_value(Array.arrayify(scope->previous_country_tags), value);
 		case "check_variable": return (int)scope->variables[?value->which] >= (int)value->value;
 		case "has_parliament":
 			return all_country_modifiers(data, scope)->has_parliament;
