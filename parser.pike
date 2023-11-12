@@ -53,7 +53,7 @@ mapping|array|maparray coalesce(mixed ret_or_brace, mixed ret) {
 	if (!sizeof(ret->indexed)) return ret->keyed;
 	if (!sizeof(ret->keyed)) return ret->indexed;
 	//Sometimes there's a mapping, but it also has an array of empty mappings after it.
-	if (Array.all(ret->indexed, mappingp) && !Array.any(ret->indexed, sizeof)) return ret->keyed;
+	if (Array.all(ret->indexed, (mixed)mappingp) && !Array.any(ret->indexed, (mixed)sizeof)) return ret->keyed;
 	return ret;
 }
 maparray makemapping(mixed name, mixed _, mixed val) {return maparray()->addkey(name, val);}
@@ -143,7 +143,7 @@ class StringFile(string basis) {
 	void stat() { } //No file system stats available.
 }
 
-mapping(string:Image.Image) image_cache = ([]);
+mapping(string:array(int|Image.Image)) image_cache = ([]);
 Image.Image|array(Image.Image|int) load_image(string fn, int|void withhash) {
 	if (!image_cache[fn]) {
 		string raw = Stdio.read_file(fn);
@@ -268,7 +268,8 @@ class GameConfig {
 		return parse_eu4txt(Stdio.read_file(PROGRAM_PATH + fn));
 	}
 
-	mapping(string:string) L10n = ([]), province_localised_names;
+	mapping(string:string) L10n = ([]);
+	mapping(string:array) province_localised_names = ([]);
 	void parse_localisation(string data) {
 		array lines = utf8_to_string("#" + data) / "\n"; //Hack: Pretend that the heading line is a comment
 		foreach (lines, string line) {
@@ -697,7 +698,6 @@ log = \"PROV-TERRAIN-END\"
 		}
 
 		//Parse out localised province names and map from province ID to all its different names
-		province_localised_names = ([]);
 		foreach (sort(get_dir(PROGRAM_PATH + "/common/province_names")), string fn) {
 			mapping names = parse_eu4txt(Stdio.read_file(PROGRAM_PATH + "/common/province_names/" + fn) + "\n");
 			string lang = L10n[fn - ".txt"] || fn; //Assuming that "castilian.txt" is the culture Castilian, and "TUR.txt" is the nation Ottomans
