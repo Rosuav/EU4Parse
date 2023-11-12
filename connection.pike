@@ -244,7 +244,7 @@ string save_custom_nation(mapping data) {
 	//the file more consistent (no point randomly reordering stuff).
 	string output = sprintf("# Editable: %s\n", pwd);
 	foreach (custnat_keys, string key) {
-		mapping val = data->data[key];
+		mixed val = data->data[key];
 		if (stringp(val) || intp(val)) {
 			//Strings that look like numbers get output without quotes
 			if ((string)(int)val == val) output += sprintf("%s=%d\n", key, (int)val);

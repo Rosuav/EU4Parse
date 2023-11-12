@@ -791,7 +791,7 @@ array(string|int) describe_requirements(mapping req, mapping prov, mapping count
 			req->province_is_or_accepts_religion_group = (["religion_group": Array.arrayify(grp)[*]]);
 	}
 	foreach (sort(indices(req)), string type) {
-		array need = Array.arrayify(req[type]);
+		array|mapping need = Array.arrayify(req[type]);
 		switch (type) {
 			case "province_is_or_accepts_religion_group": {
 				//If multiple, it's gonna be "OR" mode, otherwise it could never be true
@@ -1002,7 +1002,7 @@ void analyze_upgrades(mapping data, string name, string tag, mapping write) {
 		foreach (prov->buildings; string b;) {
 			mapping bldg = G->CFG->building_types[b]; if (!bldg) continue; //Unknown building??
 			if (bldg->influencing_fort) continue; //Ignore forts - it's often not worth upgrading all forts. (TODO: Have a way to request forts too.)
-			mapping target;
+			string target;
 			while (mapping upgrade = G->CFG->building_types[bldg->obsoleted_by]) {
 				[string techtype, int techlevel] = upgrade->tech_required;
 				if ((int)country->technology[techtype] < techlevel) break;
