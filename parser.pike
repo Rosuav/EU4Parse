@@ -800,7 +800,7 @@ int main() {
 	pipe = Stdio.File(3); //We should have been given fd 3 as a pipe
 	Stdio.Buffer incoming = Stdio.Buffer(), outgoing = Stdio.Buffer();
 	pipe->set_buffer_mode(incoming, outgoing);
-	pipe->set_nonblocking(piperead, 0, pipe->close);
+	pipe->set_nonblocking(piperead, 0) {pipe->close();};
 	signal(3, 0); //Ignore SIGQUIT as it's used by the parent process to trigger reloads
 	return -1;
 }
@@ -833,7 +833,7 @@ void parser_pipe_msg(object pipe, string msg) {
 
 void spawn() {
 	object proc = Process.spawn_pike(({"eu4_parse.pike", "--parse"}), (["fds": ({parser_pipe->pipe(Stdio.PROP_NONBLOCK|Stdio.PROP_BIDIRECTIONAL|Stdio.PROP_IPC)})]));
-	parser_pipe->set_nonblocking(parser_pipe_msg, 0, parser_pipe->close);
+	parser_pipe->set_nonblocking(parser_pipe_msg, 0) {parser_pipe->close();};
 	//Find the newest .eu4 file in the directory and (re)parse it, then watch for new files.
 	array(string) files = SAVE_PATH + "/" + get_dir(SAVE_PATH)[*];
 	sort(file_stat(files[*])->mtime, files);
