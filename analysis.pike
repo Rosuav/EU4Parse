@@ -1471,10 +1471,22 @@ int|array(int|array(string)) provincial_unrest(mapping data, string provid, int|
 	//werror("%O\n", prov - (<"discovered_by", "all_province_modifiers">));
 	int unrest = 0;
 	array sources = ({ });
-	m_delete(country, "all_country_modifiers");
+	//m_delete(country, "all_country_modifiers"); //Purge for debugging if hammering things eg with reload checks
 	mapping counmod = all_country_modifiers(data, country);
-	m_delete(prov, "all_province_modifiers");
+	//m_delete(prov, "all_province_modifiers");
 	mapping provmod = all_province_modifiers(data, (int)provid);
+
+	//If you seize land from estates, you get 10 unrest that decays 1 per year, or 0.08333/month.
+	if (string estate_unrest = prov->flags->?has_estate_unrest_flag) {
+		sscanf(estate_unrest, "%d.%d.", int since_year, int since_mon);
+		sscanf(data->date, "%d.%d.", int now_year, int now_mon);
+		int months = 120 - ((now_year - since_year) * 12 + now_mon - since_mon);
+		if (months > 0) {
+			unrest += 1000 * months / 12;
+			sources += ({sprintf("Seizure of Estate Land: %d", 1000 * months / 12)});
+		}
+	}
+
 	unrest += counmod->global_unrest + provmod->local_unrest;
 	sources += counmod->_sources->global_unrest;
 	sources += provmod->_sources->local_unrest;
