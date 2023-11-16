@@ -431,6 +431,14 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	}
 
 	_incorporate_all(data, country, modifiers, "Reform", G->CFG->reform_definitions, country->government->reform_stack->reforms);
+	//TODO: Reforms can have conditional modifiers. Notably, if you have Statists vs
+	//Monarchists (or Orangists), the one in power affects your country. This is
+	//tracked in country->statists_vs_monarchists; note that if the gauge is at
+	//precisely zero, this puts the statists in power, which effectively includes
+	//zero with the negative numbers.
+	//Conditional modifiers have an "allow" block and then everything else gets
+	//incorporated as normal. The attribute "states_general_mechanic" seems to have
+	//the effects of the two sides, although I'm not 100% sure of the details.
 
 	if (data->celestial_empire->emperor == country->tag) {
 		int mandate = threeplace(data->celestial_empire->imperial_influence);
