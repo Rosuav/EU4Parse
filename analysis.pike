@@ -2337,6 +2337,8 @@ protected void create() {
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
+	//NOTE: Reform "Expand Temple Rights" aka secure_clergy_power_reform does not
+	//seem to properly apply its effect. Possible issue with has_tax_building_trigger?
 	werror("702: %O\n", provincial_unrest(data, "702", 1));
 	mapping country = data->countries[data->player];
 	m_delete(country, "all_country_modifiers");
