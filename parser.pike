@@ -95,7 +95,7 @@ mapping parse_eu4txt(string|Stdio.Buffer data, function|void progress_cb, int|vo
 			while (lit != "" && lit[-1] == '\\') {
 				str = data->sscanf("%[^\"]\"");
 				if (!str) break; //Should possibly be a parse error?
-				lit += "\"" + str[0];
+				lit += "\"" + str[0]; //TODO: Should this strip off the last character of lit (the backslash) before adding the quote?
 			}
 			return ({"string", replace(lit, "\\\\", "\\")});
 		}
