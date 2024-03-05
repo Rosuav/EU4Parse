@@ -219,7 +219,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "janissary_percentage": {
 			if (undefinedp(scope->janissary_percentage)) {
 				//This gets checked a LOT by the Janissaries Estate, so cache the value
-				int total_army = scope->army && sizeof(scope->army) && `+(@sizeof(scope->army->regiment[*]));
+				int total_army = scope->army && sizeof(scope->army) && `+(@sizeof(scope->army->regiment[*])) || 1;
 				scope->janissary_percentage = threeplace(scope->num_subunits_type_and_cat->?infantry->?janissaries) / total_army;
 			}
 			return scope->janissary_percentage >= threeplace(value);
