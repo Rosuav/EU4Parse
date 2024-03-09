@@ -1,4 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend&display=swap');
+
 * {box-sizing: border-box;}
+
+body {
+	font-family: 'Lexend', sans-serif;
+	line-height: 1.3;
+}
 
 main {
 	max-width: 1200px;
@@ -37,6 +44,7 @@ h1 {max-width: max-content; margin: auto;}
 details {
 	border: 1px solid black;
 	margin: 1em 0;
+	padding: 0.1em;
 	transition: background 2s;
 }
 details.jumphighlight {
@@ -49,6 +57,9 @@ table {
 }
 td {padding: 2px;}
 
+li {
+	margin-bottom: 0.25em;
+}
 .bulletless {
 	list-style-type: none;
 }
