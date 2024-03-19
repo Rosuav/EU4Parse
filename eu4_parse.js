@@ -564,7 +564,7 @@ section("unguarded_rebels", "Rebels", "Unguarded rebels", state => {
 section("subjects", "Subjects", "Subject nations", state => [
 	SUMMARY("Subject nations (" + state.subjects.length + ")"),
 	sortable({id: "subject_nations", border: "1"},
-		["Country", "Type", "#Liberty", "#Opinion", "#Improved", "Since", "Integrate?"],
+		["Country", "Type", "#Liberty", "#Opinion", "#Improved", "Since", "Integrate?", "Est"],
 		state.subjects.map(subj => TR([
 			TD(COUNTRY(subj.tag)),
 			TD(subj.type),
@@ -576,6 +576,9 @@ section("subjects", "Subjects", "Subject nations", state => [
 			TD(Math.floor(subj.improved / 1000) + ""),
 			TD(subj.start_date),
 			TD({class: subj.can_integrate ? "interesting1" : ""}, subj.integration_date),
+			subj.integration_finished ? TD({
+				title: subj.integration_cost + " at " + subj.integration_speed + "/mo",
+			}, subj.integration_finished) : TD(),
 		])),
 	),
 ]);

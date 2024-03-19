@@ -2096,13 +2096,58 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				can_integrate = 1;
 		}
 		write->countries[stag]->relations = relations; //TODO: Provide this for all countries, not just subjects
+		int integration_cost, integration_speed;
+		string integration_finished;
+		if (integration_date != "n/a") {
+			//Calculate the annexation cost. This is their total development,
+			//minus any provinces that we have core on, modified by annexation
+			//cost modifiers. Also, to make this relevant, we also need to know
+			//how much diplo power we can pour into annexation per month.
+			int dev = threeplace(subj->development); //TODO: Subtract out any cores we have (or count dev ourselves from the provinces)
+			//NOTE: This isn't shown on the wiki, but if a subject has fractional dev, it seems to get rounded up.
+			//Need to test this further. For now, sticking with the precise value.
+			mapping overlord = all_country_modifiers(data, country);
+			//mapping subject = all_country_modifiers(data, subj);
+			//werror("%O: Dev %d admin eff %d mods %d power cost %d\n",
+			//	stag, dev, overlord->administrative_efficiency, overlord->diplomatic_annexation_cost, overlord->all_power_cost);
+			dev = dev * 8 //Base annexaction cost is 8 diplo power
+				* (1000 + overlord->administrative_efficiency)
+				* (1000 + overlord->diplomatic_annexation_cost)
+				* (1000 + overlord->all_power_cost)
+				/ 1000000000000; //Rescale to integers (dev is in threeplace)
+			integration_cost = dev;
+			integration_speed = 2 + (subj->religion == country->religion) + overlord->diplomatic_reputation / 1000;
+			if (subj->primary_culture == country->primary_culture) integration_speed++; //Same primary culture? Definitely same group.
+			else {
+				//I don't think there's an easy way to go from a culture to a group.
+				foreach (G->CFG->culture_definitions; string key; mapping grp)
+					if (grp[country->primary_culture]) {
+						if (grp[subj->primary_culture]) integration_speed++;
+						break;
+					}
+			}
+			//Can't integrate yet? Estimate from when we can. Can? Estimate from today.
+			//Already started? Estimate from today and reduce the cost by progress.
+			string date = can_integrate ? integration_date : data->date;
+			foreach (Array.arrayify(data->diplomacy->annexation), mapping dep)
+				if (dep->first == tag && dep->second == stag) {
+					date = data->date;
+					integration_cost -= (int)dep->progress;
+				}
+			sscanf(date, "%d.%d.", int yy, int mm);
+			int months = integration_cost / integration_speed; //We need to round up. Easiest to add another month at the end.
+			yy += (mm + months) / 12;
+			mm = (mm + months) % 12 + 1; //Adding a month here means zero cost equals next month.
+			integration_finished = sprintf("%d.%d.1", yy, mm);
+		}
 		write->subjects += ({([
 			"tag": stag,
 			"type": dep->subject_type ? L10N(dep->subject_type + "_title") : "(unknown)",
 			"improved": impr,
-			"liberty_desire": subj->cached_liberty_desire, //How accurate is this?
+			"liberty_desire": subj->cached_liberty_desire,
 			"start_date": dep->start_date, "integration_date": integration_date,
-			"can_integrate": can_integrate,
+			"can_integrate": can_integrate, "integration_cost": integration_cost,
+			"integration_speed": integration_speed, "integration_finished": integration_finished,
 		])});
 	}
 
