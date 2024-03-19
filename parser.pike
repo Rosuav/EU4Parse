@@ -755,8 +755,8 @@ mapping parse_savefile_string(string data, string|void filename) {
 		//and should be able to be parsed just like an uncompressed save. (The ai file is
 		//also the exact same format, so if it's ever needed, just add a third sscanf.)
 		object zip = Filesystem.Zip._Zip(StringFile(data));
-		sscanf(zip->read("meta") || "", "EU4txt%s", string meta);
-		sscanf(zip->read("gamestate") || "", "EU4txt%s", string state);
+		sscanf(zip->read("meta") || "m", "EU4txt%s", string meta);
+		sscanf(zip->read("gamestate") || "g", "EU4txt%s", string state);
 		if (meta && state) data = meta + state; else return 0;
 	}
 	else if (!sscanf(data, "EU4txt%s", data)) return 0;
