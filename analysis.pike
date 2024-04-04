@@ -2128,7 +2128,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			}
 			//Can't integrate yet? Estimate from when we can. Can? Estimate from today.
 			//Already started? Estimate from today and reduce the cost by progress.
-			string date = can_integrate ? integration_date : data->date;
+			string date = !can_integrate ? integration_date : data->date;
 			foreach (Array.arrayify(data->diplomacy->annexation), mapping dep)
 				if (dep->first == tag && dep->second == stag) {
 					date = data->date;
