@@ -3,6 +3,7 @@ mapping(string:array(object)) websocket_groups = ([]);
 multiset(object) notifiers = (<>);
 
 mapping respond(Protocols.HTTP.Server.Request req) {
+	if (req->not_query == "/test") return (["type": "text/html", "data": "Test!\n"]);
 	mapping mimetype = (["eu4_parse.js": "text/javascript", "eu4_parse.css": "text/css"]);
 	if (string ty = mimetype[req->not_query[1..]]) return ([
 		"type": ty, "file": Stdio.File(req->not_query[1..]),
@@ -503,13 +504,39 @@ class Connection(Stdio.File sock) {
 
 void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
+class trytls {
+	inherit Protocols.WebSocket.Request;
+	void opportunistic_tls(string s) {
+		//Not functional; we're not getting anywhere here (maybe it's stuck in blocking
+		//mode?). Would be nice if we could accept connections on both, or at least,
+		//send back a redirect to the nonencrypted socket.
+		werror("Opportunistic TLS! %O\n", my_fd);
+		object ctx = SSL.Context();
+		string cert = Stdio.read_file("../stillebot/certificate_local.pem");
+		string key = Stdio.read_file("../stillebot/privkey_local.pem");
+		ctx->add_cert(Standards.PEM.simple_decode(key),
+			Standards.PEM.Messages(cert)->get_certificates());
+		SSL.File sock = SSL.File(my_fd, ctx);
+		sock->set_accept_callback() {
+			werror("Accept complete!\n");
+		};
+		sock->set_write_callback() {
+			werror("Can write\n");
+		};
+		werror("Accept: %O\n", sock->accept(s));
+		werror("SSL sock: %O\n", sock);
+		call_out(werror, 1000, "Sock now %O\n", sock);
+		//r->attach_fd(my_fd,server_port,request_callback,buf,error_callback);
+	}
+}
+
 protected void create(string name) {
 	mapping cfg = ([]);
 	catch {cfg = Standards.JSON.decode(Stdio.read_file("preferences.json"));};
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
-	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");
+	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");//->request_program = trytls;
 	Stdio.Port mainsock = Stdio.Port();
 	mainsock->bind(1444, sock_connected, "::", 1);
 	G->G->have_sockets = 1;
