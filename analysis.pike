@@ -2135,10 +2135,12 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 					integration_cost -= (int)dep->progress;
 				}
 			sscanf(date, "%d.%d.", int yy, int mm);
-			int months = integration_cost / integration_speed; //We need to round up. Easiest to add another month at the end.
-			yy += (mm + months) / 12;
-			mm = (mm + months) % 12 + 1; //Adding a month here means zero cost equals next month.
-			integration_finished = sprintf("%d.%d.1", yy, mm);
+			if (integration_speed > 0) {
+				int months = integration_cost / integration_speed; //We need to round up. Easiest to add another month at the end.
+				yy += (mm + months) / 12;
+				mm = (mm + months) % 12 + 1; //Adding a month here means zero cost equals next month.
+				integration_finished = sprintf("%d.%d.1", yy, mm);
+			}
 		}
 		write->subjects += ({([
 			"tag": stag,
