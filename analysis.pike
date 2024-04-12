@@ -1940,12 +1940,52 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 	foreach (G->CFG->country_decisions; string kwd; mapping info) {
 		if (ignored[kwd]) continue; //The user has said to ignore it, so hide it from the list.
 		if (!trigger_matches(data, ({country}), "AND", info->potential)) continue;
-		array interesting = enumerate_highlight_provinces(data, country, info->provinces_to_highlight);
-		if (sizeof(interesting)) write->decisions_missions += ({([
-			"id": kwd,
-			"name": L10N(kwd + "_title"),
-			"provinces": interesting,
-		])});
+		//Some missions get special handling. For the rest, show their province highlights.
+		switch (kwd) {
+			case "confirm_thalassocracy": {
+				//This decision has two parts: Complete one of the key idea sets, and
+				//get enough trade power. We're going to suppress this altogether if
+				//you don't have the ideas, and show the trade power as percentages in
+				//a nice table.
+				if (has_value(Array.arrayify(country->modifier)->modifier, "thalassocracy")) break; //Already a thalassocrat!
+				if (!country->active_idea_groups->?maritime_ideas && !country->active_idea_groups->?naval_ideas) break; //If you don't have the ideas even unlocked, don't show it.
+				//You need to be the strongest trader in all nodes in any one group.
+				array(array) groups = ({
+					({"Northern Europe", ({"lubeck", "baltic_sea", "english_channel", "north_sea", "novgorod"})}),
+					({"Western Mediterranean", ({"sevilla", "valencia", "genua", "tunis", "safi"})}),
+					({"Eastern Mediterranean", ({"venice", "ragusa", "alexandria", "constantinople", "aleppo"})}),
+					({"Western Indian Ocean", ({"zanzibar", "gulf_of_aden", "hormuz", "gujarat", "comorin_cape"})}),
+					({"Eastern Indian Ocean", ({"ganges_delta", "gulf_of_siam", "malacca", "the_moluccas", "philippines"})}),
+				});
+				mapping nodes_by_id = mkmapping(data->trade->node->definitions, data->trade->node);
+				foreach (groups, [string label, array group]) {
+					foreach (group; int i; string id) {
+						mapping node = nodes_by_id[id] || ([]);
+						array top = Array.arrayify(node->top_power);
+						group[i] = ([
+							"name": L10N(id),
+							"loc": G->CFG->tradenode_definitions[id]->location,
+							//Since search() returns -1 on failure, adding 1 to get to one-based ranks makes that into zero :) Convenient.
+							"rank": search(top, tag) + 1,
+							"percent": node->total && threeplace(node[tag]->?val || "0") * 100 / threeplace(node->total),
+						]);
+					}
+				}
+				write->decisions_missions += ({([
+					"id": kwd,
+					"name": L10N(kwd + "_title"),
+					"trade_nodes": groups,
+				])});
+				break;
+			}
+			default:
+				array interesting = enumerate_highlight_provinces(data, country, info->provinces_to_highlight);
+				if (sizeof(interesting)) write->decisions_missions += ({([
+					"id": kwd,
+					"name": L10N(kwd + "_title"),
+					"provinces": interesting,
+				])});
+		}
 	}
 
 	//Get some info about provinces, for the sake of the province details view

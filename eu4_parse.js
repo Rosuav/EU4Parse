@@ -255,11 +255,22 @@ function province_list(prov) {
 	return LI(""+prov);
 }
 
+const rank_lbl = ["unranked", "1st", "2nd", "3rd"];
+const render_mission = {
+	confirm_thalassocracy: mission => TABLE({border: "1"}, mission.trade_nodes.map(([label, nodes]) => 
+		TR([TH(label), nodes.map(node => TD({class: node.rank === 1 ? "interesting1" : ""}, [
+			PROV(node.loc, node.name), BR(),
+			node.percent + "% (" + (rank_lbl[node.rank] || node.rank + "th") + ")",
+		]))]),
+	)),
+	"": mission => UL(mission.provinces.map(province_list)),
+};
+
 section("decisions_missions", "", "Decisions and Missions", state => [
 	SUMMARY(`Decisions and Missions [${state.decisions_missions.length}]`),
 	state.decisions_missions.map(mission => [
 		H3([proventer(mission.id), mission.name]),
-		UL(mission.provinces.map(province_list)),
+		(render_mission[mission.id] || render_mission[""])(mission),
 		provleave(),
 	]),
 ]);
