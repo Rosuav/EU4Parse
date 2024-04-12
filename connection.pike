@@ -174,11 +174,11 @@ void websocket_cmd_listcustoms(mapping conn, mapping data) {
 	string customdir = LOCAL_PATH + "/custom nations";
 	mapping nations = ([]);
 	foreach (sort(get_dir(customdir)), string fn)
-		nations[fn] = G->low_parse_savefile(Stdio.read_file(customdir + "/" + fn));
+		nations[fn] = G->G->parser->parse_eu4txt(Stdio.read_file(customdir + "/" + fn));
 	send_update(({conn->sock}), ([
 		"cmd": "customnations",
 		"nations": nations,
-		"custom_ideas": G->custom_ideas,
+		"custom_ideas": G->CFG->custom_ideas,
 		"effect_display_mode": effect_display_mode,
 		"map_colors": G->CFG->custom_country_colors->color,
 	]));
