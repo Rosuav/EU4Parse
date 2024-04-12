@@ -1135,7 +1135,6 @@ function update_nation_details() {
 		const info = custom_ideas[idea.index];
 		levels[info.category] += Math.floor(10 * idea.level / info.max_level);
 	});
-	console.log(levels);
 	const tot = levels.ADM + levels.DIP + levels.MIL;
 	const max = Math.max(levels.ADM, levels.DIP, levels.MIL);
 	//Note that the penalty is quantized to half a percent. Not sure why that exact cutoff.
