@@ -245,7 +245,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "has_mission": {
 			foreach (Array.arrayify(scope->country_missions->?mission_slot), array slot) {
 				foreach (Array.arrayify(slot), string kwd) {
-					if (G->CFG->country_missions[kwd][value]) return 1;
+					if (G->CFG->country_missions[kwd][?value]) return 1;
 				}
 			}
 			return 0;
@@ -1906,7 +1906,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 			//that have to be completed. I think that, if there are multiple
 			//mission chains in a slot, they are laid out vertically. In any case,
 			//we don't really care about layout, just which missions there are.
-			mapping mission = G->CFG->country_missions[kwd];
+			mapping mission = G->CFG->country_missions[kwd] || ([]);
 			foreach (mission; string id; mixed info) {
 				if (has_value(completed, id)) continue; //Already done this mission, don't highlight it.
 				string title = G->CFG->L10n[id + "_title"];
