@@ -504,29 +504,13 @@ class Connection(Stdio.File sock) {
 
 void sock_connected(object mainsock) {while (object sock = mainsock->accept()) Connection(sock);}
 
+object tlsctx;
 class trytls {
 	inherit Protocols.WebSocket.Request;
 	void opportunistic_tls(string s) {
-		//Not functional; we're not getting anywhere here (maybe it's stuck in blocking
-		//mode?). Would be nice if we could accept connections on both, or at least,
-		//send back a redirect to the nonencrypted socket.
-		werror("Opportunistic TLS! %O\n", my_fd);
-		object ctx = SSL.Context();
-		string cert = Stdio.read_file("../stillebot/certificate_local.pem");
-		string key = Stdio.read_file("../stillebot/privkey_local.pem");
-		ctx->add_cert(Standards.PEM.simple_decode(key),
-			Standards.PEM.Messages(cert)->get_certificates());
-		SSL.File sock = SSL.File(my_fd, ctx);
-		sock->set_accept_callback() {
-			werror("Accept complete!\n");
-		};
-		sock->set_write_callback() {
-			werror("Can write\n");
-		};
-		werror("Accept: %O\n", sock->accept(s));
-		werror("SSL sock: %O\n", sock);
-		call_out(werror, 1000, "Sock now %O\n", sock);
-		//r->attach_fd(my_fd,server_port,request_callback,buf,error_callback);
+		SSL.File ssl = SSL.File(my_fd, tlsctx);
+		ssl->accept(s);
+		attach_fd(ssl, server_port, request_callback);
 	}
 }
 
@@ -536,7 +520,17 @@ protected void create(string name) {
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
-	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");//->request_program = trytls;
+	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");//->request_program = trytls; //Not quite working yet.
+	tlsctx = SSL.Context();
+	foreach (({"", "_local"}), string tag) {
+		string cert = Stdio.read_file("../stillebot/certificate" + tag + ".pem");
+		string key = Stdio.read_file("../stillebot/privkey" + tag + ".pem");
+		if (key && cert) {
+			string pk = Standards.PEM.simple_decode(key);
+			array certs = Standards.PEM.Messages(cert)->get_certificates();
+			tlsctx->add_cert(pk, certs);
+		}
+	}
 	Stdio.Port mainsock = Stdio.Port();
 	mainsock->bind(1444, sock_connected, "::", 1);
 	G->G->have_sockets = 1;
