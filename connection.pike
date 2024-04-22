@@ -520,7 +520,7 @@ protected void create(string name) {
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
-	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::");//->request_program = trytls; //Not quite working yet.
+	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::")->request_program = Function.curry(trytls)(ws_handler);
 	tlsctx = SSL.Context();
 	foreach (({"", "_local"}), string tag) {
 		string cert = Stdio.read_file("../stillebot/certificate" + tag + ".pem");
