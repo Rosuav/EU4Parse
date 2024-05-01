@@ -522,13 +522,15 @@ protected void create(string name) {
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
 	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::")->request_program = Function.curry(trytls)(ws_handler);
 	tlsctx = SSL.Context();
+	array|zero wildcard = ({"*"});
 	foreach (({"", "_local"}), string tag) {
 		string cert = Stdio.read_file("../stillebot/certificate" + tag + ".pem");
 		string key = Stdio.read_file("../stillebot/privkey" + tag + ".pem");
 		if (key && cert) {
 			string pk = Standards.PEM.simple_decode(key);
 			array certs = Standards.PEM.Messages(cert)->get_certificates();
-			tlsctx->add_cert(pk, certs);
+			tlsctx->add_cert(pk, certs, wildcard);
+			wildcard = UNDEFINED; //Only one wildcard cert.
 		}
 	}
 	Stdio.Port mainsock = Stdio.Port();
