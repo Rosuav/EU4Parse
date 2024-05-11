@@ -2126,7 +2126,7 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 		int impr = 0;
 		foreach (Array.arrayify(subj->active_relations[tag]->?opinion), mapping opine) {
 			if (opine->modifier == "improved_relation") impr = threeplace(opine->current_opinion);
-			relations += ({opine | G->CFG->opinion_modifiers[opine->modifier] | (["name": L10N(opine->modifier)])});
+			relations += ({opine | (G->CFG->opinion_modifiers[opine->modifier]||([])) | (["name": L10N(opine->modifier)])});
 		}
 		int integ = integration[dep->subject_type];
 		string integration_date = "n/a";
