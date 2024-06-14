@@ -177,7 +177,7 @@ int(1bit) trigger_matches(mapping data, array(mapping) scopes, string type, mixe
 		case "has_country_flag":
 			return !!scope->flags[?value]; //Flags are mapped to the date when they happened. We just care about presence.
 		case "had_country_flag": { //Oh, but what if we don't just care about presence?
-			string date = scope->flags[value->flag];
+			string date = scope->flags[?value->flag];
 			if (!date) return 0; //Don't have the flag, so we haven't had it for X days
 			object today = calendar(data->date);
 			int days; catch {days = calendar(date)->distance(today) / today;};
