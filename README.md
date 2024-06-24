@@ -18,7 +18,6 @@ available if desired.
 TODO: Document the key sender and consequent "go to province" feature.
 
 TODO: Add an alert to recommend Strong Duchies if you don't have it, have 2+ march/vassal/PU, and either have >50% LD or over slots
-TODO: Don't recommend seizing land if <80 and 100%
 TODO: If annexing a subject, replace its date with progress (X/Y) and maybe rate (Z/month)
 TODO: Alert if idle colonist
 TODO: War progress.
