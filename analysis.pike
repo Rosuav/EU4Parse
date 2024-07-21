@@ -667,7 +667,7 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 		mapping cot = G->CFG->cot_definitions[type + prov->center_of_trade];
 		_incorporate(data, prov, modifiers, "Level " + prov->center_of_trade + " COT", cot->?province_modifiers);
 	}
-	if (int l3cot = country->area_has_level3[?G->CFG->prov_area[(string)id]]) {
+	if (int l3cot = country->?area_has_level3[?G->CFG->prov_area[(string)id]]) {
 		string type = G->CFG->province_info[(string)l3cot]->?has_port ? "coastal3" : "inland3";
 		mapping cot = G->CFG->cot_definitions[type];
 		_incorporate(data, prov, modifiers, "L3 COT in area", cot->?state_modifiers);
@@ -730,12 +730,12 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	}
 
 	string cul = prov->culture, cul_modifier = "non_accepted_culture";
-	if (cul == country->primary_culture || has_value(Array.arrayify(country->accepted_culture), cul))
+	if (cul == country->?primary_culture || has_value(Array.arrayify(country->accepted_culture), cul))
 		cul_modifier = "same_culture"; //This doesn't actually exist - there seem to be no "accepted culture" modifiers
 	else {
 		//What if it's in your culture group?
 		foreach (G->CFG->culture_definitions; string group; mapping info)
-			if (info[country->primary_culture] && info[cul])
+			if (info[country->?primary_culture] && info[cul])
 				//Same group. If you're empire rank, that counts as accepted.
 				cul_modifier = country->government_rank == "3" ? "same_culture" : "same_culture_group";
 	}
