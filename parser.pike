@@ -192,9 +192,14 @@ array list_config_dir(array(string) config_dirs, string dir) {
 }
 
 void update_checksum(object hash, array(string) dirs, string dir, string tail, int recurse) {
-	foreach (list_config_dir(dirs, "/" + dir), string fn) {
+	foreach (list_config_dir(dirs, "/" + dir), string fn)
 		if (has_suffix(fn, tail)) hash->update(Stdio.read_file(fn));
-		if (recurse && Stdio.is_dir(fn)) update_checksum(hash, dirs, fn, tail, 1);
+	if (recurse) {
+		//Enumerate directories to search for by examining the main program files,
+		//assumed to be the first in the list of directories.
+		string base = dirs[0] + "/" + dir;
+		foreach (sort(get_dir(base)), string fn)
+			if (Stdio.is_dir(base + "/" + fn)) update_checksum(hash, dirs, dir + "/" + fn, tail, 1);
 	}
 }
 
