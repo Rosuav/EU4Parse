@@ -77,6 +77,22 @@ let ws_sync = null; import('https://sikorsky.rosuav.com/static/ws_sync.js').then
 			"extra_heads": (["ETag": etag, "Cache-Control": "max-age=604800"]),
 		]);
 	}
+	if (sscanf(req->not_query, "/load/%s", string fn) && fn) {
+		if (fn != "") {
+			G->G->parser->process_savefile(SAVE_PATH + "/" + fn);
+			return (["type": "text/plain", "data": "Loaded"]);
+		}
+		//Show a list of loadable files
+		array(string) files = get_dir(SAVE_PATH);
+		sort(file_stat((SAVE_PATH + "/" + files[*])[*])->mtime[*] * -1, files);
+		return ([
+			"type": "text/html",
+			"data": sprintf(#"<!DOCTYPE HTML><html lang=en>
+<head><title>EU4 Savefile Analysis</title><link rel=stylesheet href=\"/eu4_parse.css\"></head>
+<body><main><h1>Select a file</h1><ul>%{<li><a href=%q>%<s</a></li>%}</ul></main></body></html>
+", files),
+		]);
+	}
 }
 constant NOT_FOUND = (["error": 404, "type": "text/plain", "data": "Not found"]);
 void http_handler(Protocols.HTTP.Server.Request req) {req->response_and_finish(respond(req) || NOT_FOUND);}
