@@ -1951,7 +1951,10 @@ void analyze_obscurities(mapping data, string name, string tag, mapping write, m
 				//you don't have the ideas, and show the trade power as percentages in
 				//a nice table.
 				if (has_value(Array.arrayify(country->modifier)->modifier, "thalassocracy")) break; //Already a thalassocrat!
-				if (!country->active_idea_groups->?maritime_ideas && !country->active_idea_groups->?naval_ideas) break; //If you don't have the ideas even unlocked, don't show it.
+				if (!country->active_idea_groups->?maritime_ideas
+					&& !country->active_idea_groups->?naval_ideas
+					&& !country->active_idea_groups->?trade_ideas //Technically only valid starting in 1.37 and newer but I'll show this even if you're on an older one
+				) break; //If you don't have the ideas even unlocked, don't show it.
 				//You need to be the strongest trader in all nodes in any one group.
 				array(array) groups = ({
 					({"Northern Europe", ({"lubeck", "baltic_sea", "english_channel", "north_sea", "novgorod"})}),
