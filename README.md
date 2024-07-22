@@ -3,7 +3,7 @@ Europa Universalis IV savefile parser
 
 Keep an eye on the state of the game, at least as frequently as your
 autosaves happen. Any non-ironman save file should be able to be read
-by this script; if you're playing ironman, you probably shouldn't be\
+by this script; if you're playing ironman, you probably shouldn't be
 using this sort of tool anyway!
 
 Mods are supported and recognized but may cause issues. Please file
@@ -12,8 +12,9 @@ bug reports if you find problems.
 Both compressed and uncompressed save files can be read.
 
 The information can best be viewed using a web browser; the default
-port is 8087 but this can be changed. A TELNET interface is also
-available if desired.
+port is 8087 but this can be changed. It can be accessed on HTTP or
+HTTPS, with the latter requiring that the necessary cert/key be in
+the "../stillebot/" directory (don't ask).
 
 TODO: Document the key sender and consequent "go to province" feature.
 
@@ -32,3 +33,4 @@ problem while the nation existed), with an empty {} inserted prior to the date-k
 - The slow parser still worked, so this wasn't a major problem, but it's a nuisance.
 - Manually hacking out the empty array from the start fixed the problem, and a subsequent
   save worked fine.
+- Sighted a second time 20240722. Does this recur?
