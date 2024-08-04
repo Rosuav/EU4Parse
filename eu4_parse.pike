@@ -79,6 +79,12 @@ int main(int argc, array(string) argv) {
 		werror("Time %O\n", tm->get());
 		return 0;
 	}
+	if (argc > 1 && argv[1] == "--peace") {
+		//Just watch for peace treaties, nothing else.
+		add_constant("SKIP_SAVEFILES", 1);
+		bootstrap("monitors");
+		return -1;
+	}
 	bootstrap("connection"); //Only needed for the main entrypoint
 	bootstrap("analysis");
 	bootstrap("monitors");

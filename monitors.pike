@@ -186,6 +186,9 @@ protected void create() {
 	if (G->G->inotify) destruct(G->G->inotify); //Hack. TODO: Keep the inotify and change the code it calls, rather than closing it and start over.
 	object inot = G->G->inotify = System.Inotify.Instance();
 	string new_file; int nomnomcookie;
+	#if constant(SKIP_SAVEFILES)
+	if (0)
+	#endif
 	inot->add_watch(SAVE_PATH, System.Inotify.IN_CLOSE_WRITE | System.Inotify.IN_MOVED_TO | System.Inotify.IN_MOVED_FROM) {
 		[int event, int cookie, string path] = __ARGS__;
 		//EU4 seems to always save into a temporary file, then rename it over the target. This
