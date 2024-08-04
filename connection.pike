@@ -297,7 +297,7 @@ mapping get_state(string group) {
 		//because they will track the player through tag changes (eg if you were
 		//Castille (CAS) and you form Spain (SPA), your tag will change, but you
 		//want to see data for Spain now plsthx).
-		foreach (data->players_countries / 2, [string name, string trytag])
+		if (data->players_countries) foreach (data->players_countries / 2, [string name, string trytag])
 			if (lower_case(tag) == lower_case(name)) tag = trytag;
 	}
 	mapping country = data->countries[tag];
