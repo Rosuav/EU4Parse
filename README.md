@@ -34,3 +34,9 @@ problem while the nation existed), with an empty {} inserted prior to the date-k
 - Manually hacking out the empty array from the start fixed the problem, and a subsequent
   save worked fine.
 - Sighted a second time 20240722. Does this recur?
+
+TODO: Combat prediction dialog. Select an opposing nation to use their stats, but also show all of the stats broken down.
+Key in, or select, an army for each side (for now, assume no merging of stacks).
+Assume a midrange combat dice roll, which can be forced in-game with "combat_dice N" (5?)
+Predict how combat will go. Test it against the in-game behaviour.
+Maybe show red highlights for things that are working against us, green for things that are in our favour?
