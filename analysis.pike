@@ -472,7 +472,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	foreach ("adm dip mil" / " ", string cat) {
 		int level = (int)tech[cat + "_tech"];
 		string desc = String.capitalize(cat) + " tech";
-		_incorporate_all(data, country, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level));
+		_incorporate_all(data, country, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level + 1));
 		if ((int)G->CFG->tech_definitions[cat]->technology[level]->year > year)
 			_incorporate(data, country, modifiers, "Ahead of time in " + desc, G->CFG->tech_definitions[cat]->ahead_of_time);
 		//TODO: > or >= ?
