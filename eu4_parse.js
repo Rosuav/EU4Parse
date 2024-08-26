@@ -3,6 +3,8 @@ import {lindt, replace_content, DOM, fix_dialogs} from "https://rosuav.github.io
 const {A, ABBR, B, BR, BUTTON, DETAILS, DIALOG, DIV, FORM, H1, H3, H4, HEADER, IMG, INPUT, LABEL, LI, NAV, OPTGROUP, OPTION, P, SECTION, SELECT, SPAN, STRONG, SUMMARY, TABLE, TD, TH, THEAD, TR, UL} = lindt; //autoimport
 const {BLOCKQUOTE, I, PRE} = lindt; //Currently autoimport doesn't recognize the section() decorator
 
+let defaultsection = null; //If nonnull, will autoopen this section
+
 document.body.appendChild(replace_content(null, DIALOG({id: "customnationsdlg"}, SECTION([
 	HEADER([H3("Custom nations"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
 	DIV([
@@ -32,6 +34,31 @@ document.body.appendChild(replace_content(null, DIALOG({id: "tiledviewdlg"}, SEC
 document.body.appendChild(replace_content(null, DIALOG({id: "detailsdlg"}, SECTION([
 	HEADER([H3("Detailed relations breakdown"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
 	DIV({id: "detailsmain"}),
+]))));
+document.body.appendChild(replace_content(null, DIALOG({id: "battlesdlg"}, SECTION([
+	HEADER([H3("Combat analysis"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
+	TABLE([
+		//1. Select country (two of; self in first slot by default)
+		//2. Select army. Assume for now no posseing up.
+		//3. Choose which is attacking
+		//4. Show analysis
+		TR([
+			TD(SELECT({id: "battles_nation_1"}, OPTION({value: ""}, "Select..."))),
+			TH("Nations"),
+			TD(SELECT({id: "battles_nation_2"}, OPTION({value: ""}, "Select..."))),
+		]),
+		TR([
+			TD(SELECT({id: "battles_army_1"}, OPTION({value: ""}, "Select..."))),
+			TH("Armies"),
+			TD(SELECT({id: "battles_army_2"}, OPTION({value: ""}, "Select..."))),
+		]),
+		TR([
+			TD(LABEL([INPUT({type: "radio", checked: true, name: "battles_attacker", value: "1"}), "Attacking"])),
+			TH("Direction"),
+			TD(LABEL([INPUT({type: "radio", name: "battles_attacker", value: "2"}), "Attacking"])),
+		]),
+	]),
+	DIV({id: "battlesmain"}),
 ]))));
 fix_dialogs({close_selector: ".dialog_cancel,.dialog_close", click_outside: "formless"});
 
@@ -487,6 +514,7 @@ function war_rumours(pending) {
 }
 section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current.length || "None")), [
 	DIV({id: "war_rumours"}, war_rumours(state.wars.rumoured)),
+	P(BUTTON({id: "analyzebattles"}, "Analyze/predict battles")),
 	state.wars.current.map(war => {
 		//For each war, create or update its own individual DETAILS/SUMMARY. This allows
 		//individual wars to be collapsed as uninteresting without disrupting others.
@@ -521,6 +549,17 @@ section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current
 		]);
 	}),
 ]]);
+
+on("click", "#analyzebattles", e => {
+	//Populate all drop-downs
+	DOM("#battlesdlg").showModal();
+});
+
+function recalc_battles() {
+	//...
+}
+on("change", "#battlesdlg select", recalc_battles);
+on("click", "#battlesdlg input[type=checkbox]", recalc_battles);
 
 section("badboy_hatred", "Badboy", "Aggressive Expansion (Badboy)", state => {
 	let hater_count = 0, have_coalition = 0;
@@ -973,6 +1012,19 @@ export function render(state) {
 	else if (state.agenda) replace_content("#agenda", "");
 	if (curgroup.length) replace_content("#error", "INTERNAL ERROR: Residual groups " + curgroup.join("/")).classList.remove("hidden");
 	if (state.war_rumours) replace_content("#war_rumours", war_rumours(state.war_rumours));
+
+	//Quick hack: Show a specific section. TODO: Put this in the document fragment?
+	if (defaultsection) {
+		//TODO: Dedup with others?
+		const sec = DOM("#" + defaultsection);
+		defaultsection = null;
+		if (sec) {
+			sec.open = true;
+			sec.scrollIntoView();
+			sec.classList.add("jumphighlight");
+			setTimeout(() => sec.classList.remove("jumphighlight"), 250);
+		}
+	}
 }
 
 on("click", ".sorthead", e => {
