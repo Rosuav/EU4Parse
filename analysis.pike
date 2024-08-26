@@ -2332,13 +2332,19 @@ void analyze_wars(mapping data, multiset(string) tags, mapping write) {
 			mapping unit_types = mkmapping(values(country->sub_unit), indices(country->sub_unit));
 			mapping mil = ([]), mercs = ([]);
 			//Collect some useful info about the units a country is using
-			partic->unit_details = ([]);
+			//FIXME: Will need to be able to do this for countries you're not at war with (yet),
+			//to allow for Luke 14:31-32 style analysis.
+			//Move all this with unit details and armies into an on-request info section
+			//It will also give info about your own nation (based on the ws_group). In the
+			//front end, make this available for all war enemies (in the "Wars" section),
+			//and in the nation details sidebar. Should be sufficient.
+			/*partic->unit_details = ([]);
 			foreach (country->sub_unit; string type; string id) 
 				partic->unit_details[id] = ([
 					"type": type, //eg "infantry"
 					"defn": G->CFG->unit_definitions[id],
-				]);
-			foreach (partic->armies = Array.arrayify(country->army), mapping army) {
+				]);*/
+			if (country->army) foreach (Array.arrayify(country->army), mapping army) {
 				string merc = army->mercenary_company ? "merc_" : "";
 				foreach (Array.arrayify(army->regiment), mapping reg) {
 					//Note that regiment strength is eg "0.807" for 807 men. We want the
