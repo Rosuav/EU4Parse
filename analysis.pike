@@ -730,7 +730,7 @@ mapping(string:int) all_province_modifiers(mapping data, int id) {
 	}
 
 	string cul = prov->culture, cul_modifier = "non_accepted_culture";
-	if (cul == country->?primary_culture || has_value(Array.arrayify(country->accepted_culture), cul))
+	if (cul == country->?primary_culture || has_value(Array.arrayify(country->?accepted_culture), cul))
 		cul_modifier = "same_culture"; //This doesn't actually exist - there seem to be no "accepted culture" modifiers
 	else {
 		//What if it's in your culture group?
@@ -786,6 +786,7 @@ array(float) estimate_per_month(mapping data, mapping country) {
 }
 
 array(string|int) describe_requirements(mapping req, mapping prov, mapping country, int|void any) {
+	if (!country) return ({"n/a", 3}); //Not sure how useful this will be.
 	array ret = ({ });
 	string religion = prov->religion;
 	if (religion != country->religion) religion = "n/a";
