@@ -400,6 +400,25 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	if (mapping cached = country->all_country_modifiers) return cached;
 	mapping modifiers = (["_sources": ([])]);
 	_incorporate(data, country, modifiers, "Base", G->CFG->static_modifiers->base_values);
+
+	mapping tech = country->technology || ([]);
+	sscanf(data->date, "%d.%d.%d", int year, int mon, int day);
+	foreach ("adm dip mil" / " ", string cat) {
+		int level = (int)tech[cat + "_tech"];
+		string desc = String.capitalize(cat) + " tech";
+		_incorporate_all(data, country, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level + 1));
+		if ((int)G->CFG->tech_definitions[cat]->technology[level]->year > year)
+			_incorporate(data, country, modifiers, "Ahead of time in " + desc, G->CFG->tech_definitions[cat]->ahead_of_time);
+		//TODO: > or >= ?
+	}
+	//HACK: Army morale is actually handled in two parts: base and modifier. They are called land_morale and land_morale.
+	//Yeah. The one that comes from tech is the base, the other is percentage modifiers, but they have the same name.
+	//So in our analysis, we rename the tech ones to base_land_morale. This needs to happen prior to anything that could
+	//provide a percentage modifier, such as ideas, advisors, and temporary modifiers.
+	modifiers->base_land_morale = m_delete(modifiers, "land_morale");
+	modifiers->_sources->base_land_morale = m_delete(modifiers->_sources, "land_morale");
+	//TODO: Is naval_morale done the same way?
+
 	//Ideas are recorded by their groups and how many you've taken from that group.
 	array ideas = enumerate_ideas(country->active_idea_groups);
 	_incorporate(data, country, modifiers, ideas->desc[*], ideas[*]); //TODO: TEST ME
@@ -467,16 +486,6 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 	int relig_unity = min(max(threeplace(country->religious_unity), 0), 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->religious_unity, relig_unity, 1000);
 	_incorporate(data, country, modifiers, L10N("religious_unity"), G->CFG->static_modifiers->inverse_religious_unity, 1000 - relig_unity, 1000);
-	mapping tech = country->technology || ([]);
-	sscanf(data->date, "%d.%d.%d", int year, int mon, int day);
-	foreach ("adm dip mil" / " ", string cat) {
-		int level = (int)tech[cat + "_tech"];
-		string desc = String.capitalize(cat) + " tech";
-		_incorporate_all(data, country, modifiers, desc, G->CFG->tech_definitions[cat]->technology, enumerate(level + 1));
-		if ((int)G->CFG->tech_definitions[cat]->technology[level]->year > year)
-			_incorporate(data, country, modifiers, "Ahead of time in " + desc, G->CFG->tech_definitions[cat]->ahead_of_time);
-		//TODO: > or >= ?
-	}
 	if (array have = country->institutions) foreach (G->CFG->institutions; string id; mapping inst) {
 		if (have[inst->_index] == "1") _incorporate(data, country, modifiers, "Institution", inst->bonus);
 	}
@@ -515,6 +524,10 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 		if (legitimacy_value < 50000)
 			_incorporate(data, country, modifiers, L10N(legitimacy_type), G->CFG->static_modifiers["low_" + legitimacy_type], 50000 - legitimacy_value, 100000);
 	}
+	int pp = `+(0, @threeplace(Array.arrayify(country->power_projection)->current[*]));
+	_incorporate(data, country, modifiers, L10N("power_projection"), G->CFG->static_modifiers->power_projection, pp, 100000);
+	_incorporate(data, country, modifiers, L10N("prestige"), G->CFG->static_modifiers->prestige, threeplace(country->prestige), 100000);
+	_incorporate(data, country, modifiers, L10N("army_tradition"), G->CFG->static_modifiers->army_tradition, threeplace(country->army_tradition), 100000);
 
 	//More modifier types to incorporate:
 	//- Religious modifiers (icons, cults, etc)
@@ -2437,7 +2450,7 @@ protected void create() {
 	m_delete(country, "all_country_modifiers");
 	mapping attrs = all_country_modifiers(data, country);
 	foreach (({
-		"military_tactics", "discipline", "land_morale",
+		"military_tactics", "discipline", "base_land_morale", "land_morale",
 		"infantry_fire", "infantry_shock",
 		"cavalry_fire", "cavalry_shock",
 		"artillery_fire", "artillery_shock",
