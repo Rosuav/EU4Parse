@@ -421,7 +421,7 @@ mapping(string:int) all_country_modifiers(mapping data, mapping country) {
 
 	//Ideas are recorded by their groups and how many you've taken from that group.
 	array ideas = enumerate_ideas(country->active_idea_groups);
-	_incorporate(data, country, modifiers, ideas->desc[*], ideas[*]); //TODO: TEST ME
+	_incorporate(data, country, modifiers, ideas->desc[*], ideas[*]);
 	//NOTE: Custom nation ideas are not in an idea group as standard ideas are; instead
 	//you get a set of ten, identified by index, in country->custom_national_ideas, and
 	//it doesn't say which ones you have. I think the last three are the traditions and
