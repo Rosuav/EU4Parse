@@ -2331,7 +2331,14 @@ void analyze_wars(mapping data, multiset(string) tags, mapping write) {
 			//aren't too many (and they're shared by all nations), so I just hard-code them.
 			mapping unit_types = mkmapping(values(country->sub_unit), indices(country->sub_unit));
 			mapping mil = ([]), mercs = ([]);
-			if (country->army) foreach (Array.arrayify(country->army), mapping army) {
+			//Collect some useful info about the units a country is using
+			partic->unit_details = ([]);
+			foreach (country->sub_unit; string type; string id) 
+				partic->unit_details[id] = ([
+					"type": type, //eg "infantry"
+					"defn": G->CFG->unit_definitions[id],
+				]);
+			foreach (partic->armies = Array.arrayify(country->army), mapping army) {
 				string merc = army->mercenary_company ? "merc_" : "";
 				foreach (Array.arrayify(army->regiment), mapping reg) {
 					//Note that regiment strength is eg "0.807" for 807 men. We want the
@@ -2429,7 +2436,7 @@ protected void create() {
 	if (!data) return;
 	mapping write = ([]);
 	analyze_wars(data, (<data->players_countries[1]>), write);
-	werror("Wars: %O\n", write->wars);
+	//werror("Wars: %O\n", write->wars);
 	return;
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
