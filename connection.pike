@@ -231,7 +231,7 @@ void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
 		//TODO: Province bonuses?? local_{defender,attacker}_dice_roll_bonus, own_territory_dice_roll_bonus,
 		//terrain, river crossing, landing from ship...
 		foreach (({
-			"military_tactics", "discipline", "land_morale",
+			"military_tactics", "discipline",
 			"infantry_fire", "infantry_shock",
 			"cavalry_fire", "cavalry_shock",
 			"artillery_fire", "artillery_shock",
@@ -239,6 +239,7 @@ void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
 			"morale_damage", "morale_damage_received",
 			"global_defender_dice_roll_bonus", "global_attacker_dice_roll_bonus",
 		}), string mod) info->mod[mod] = all[mod] || 0;
+		info->mod->land_morale = all->base_land_morale * (1000 + all->land_morale) / 1000;
 		infos += ({info});
 	}
 	send_update(({conn->sock}), ([
