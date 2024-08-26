@@ -425,6 +425,8 @@ void ws_msg(Protocols.WebSocket.Frame frm, mapping conn)
 	else write("Message: %O\n", data);
 }
 
+void ws_msg_bouncer(Protocols.WebSocket.Frame frm, mapping conn) {G->G->ws_msg(frm, conn);}
+
 void ws_close(int reason, mapping conn)
 {
 	if (conn->type == "eu4") websocket_groups[conn->group] -= ({conn->sock});
@@ -436,7 +438,7 @@ void ws_handler(array(string) proto, Protocols.WebSocket.Request req)
 	if (req->not_query != "/ws") {req->response_and_finish(NOT_FOUND); return;}
 	Protocols.WebSocket.Connection sock = req->websocket_accept(0);
 	sock->set_id((["sock": sock])); //Minstrel Hall style floop
-	sock->onmessage = ws_msg;
+	sock->onmessage = ws_msg_bouncer;
 	sock->onclose = ws_close;
 }
 
@@ -535,6 +537,7 @@ protected void create(string name) {
 	catch {cfg = Standards.JSON.decode(Stdio.read_file("preferences.json"));};
 	if (mappingp(cfg) && cfg->tag_preferences) tag_preferences = cfg->tag_preferences;
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
+	G->G->ws_msg = ws_msg;
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
 	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::")->request_program = Function.curry(trytls)(ws_handler);
 	tlsctx = SSL.Context();
