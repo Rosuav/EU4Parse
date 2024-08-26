@@ -3,7 +3,7 @@ import {lindt, replace_content, DOM, fix_dialogs} from "https://rosuav.github.io
 const {A, ABBR, B, BR, BUTTON, DETAILS, DIALOG, DIV, FORM, H1, H3, H4, HEADER, IMG, INPUT, LABEL, LI, NAV, OPTGROUP, OPTION, P, SECTION, SELECT, SPAN, STRONG, SUMMARY, TABLE, TD, TH, THEAD, TR, UL} = lindt; //autoimport
 const {BLOCKQUOTE, I, PRE} = lindt; //Currently autoimport doesn't recognize the section() decorator
 
-let defaultsection = null; //If nonnull, will autoopen this section
+let defaultsection = "wars"; //If nonnull, will autoopen this section
 
 document.body.appendChild(replace_content(null, DIALOG({id: "customnationsdlg"}, SECTION([
 	HEADER([H3("Custom nations"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
@@ -43,9 +43,9 @@ document.body.appendChild(replace_content(null, DIALOG({id: "battlesdlg"}, SECTI
 		//3. Choose which is attacking
 		//4. Show analysis
 		TR([
-			TD(SELECT({id: "battles_nation_1"}, OPTION({value: ""}, "Select..."))),
+			TD({id: "battles_nation_1"}), //Will be populated with flags
 			TH("Nations"),
-			TD(SELECT({id: "battles_nation_2"}, OPTION({value: ""}, "Select..."))),
+			TD({id: "battles_nation_2"}),
 		]),
 		TR([
 			TD(SELECT({id: "battles_army_1"}, OPTION({value: ""}, "Select..."))),
@@ -200,6 +200,9 @@ function update_hover_country(tag) {
 			c.overlord && LI([B(c.subject_type), " of ", COUNTRY(c.overlord)]),
 			c.truce && LI([B("Truce"), " until " + c.truce + " 🏳"]),
 		]),
+		//Note that this button carries the tag with it, allowing for potential direct-access
+		//buttons that go straight to battle analysis.
+		P(BUTTON({class: "analyzebattles", "data-tag": hovertag, style: "display: block; margin: auto"}, "Analyze/predict battles")),
 	]).classList.remove("hidden");
 	if (_saved_miltech) {
 		DOM("#miltech table").classList.remove("hoverinactive");
@@ -514,7 +517,6 @@ function war_rumours(pending) {
 }
 section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current.length || "None")), [
 	DIV({id: "war_rumours"}, war_rumours(state.wars.rumoured)),
-	P(BUTTON({id: "analyzebattles"}, "Analyze/predict battles")),
 	state.wars.current.map(war => {
 		//For each war, create or update its own individual DETAILS/SUMMARY. This allows
 		//individual wars to be collapsed as uninteresting without disrupting others.
@@ -550,10 +552,13 @@ section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current
 	}),
 ]]);
 
-on("click", "#analyzebattles", e => {
+on("click", ".analyzebattles", e => ws_sync.send({cmd: "analyzebattles", tag: e.match.dataset.tag}));
+export function sockmsg_analyzebattles(msg) {
 	//Populate all drop-downs
+	console.log("Analyze battles", msg);
+	console.log("Country info", country_info[hovertag]);
 	DOM("#battlesdlg").showModal();
-});
+}
 
 function recalc_battles() {
 	//...

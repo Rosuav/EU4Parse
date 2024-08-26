@@ -200,6 +200,53 @@ void websocket_cmd_listcustoms(mapping conn, mapping data) {
 	]));
 }
 
+void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
+	//Collect some useful info about the units a country is using
+	//NOTE: Can be used for countries you're not at war with (yet), to allow for
+	//Luke 14:31-32 style analysis, but be aware that it may provide information
+	//that you couldn't have seen in-game about the precise composition of the
+	//opposing army. (You can see the totals across the entire nation, but not
+	//how many in any given stack, unless they're near your borders.) Unlikely
+	//to be of massively unbalancing value, since you could usually see one army
+	//and deduce that others will be similar.
+	mapping data = G->G->last_parsed_savefile; if (!data) return;
+	array countries = ({
+		//Could add others if necessary eg allies/subjects. For now, reanalyze with those tags.
+		data->countries[group_to_tag(data, conn->group)],
+		data->countries[msg->tag],
+	});
+	if (has_value(countries, 0)) return;
+	array infos = ({ });
+	foreach (countries, mapping country) {
+		mapping info = (["tag": country->tag, "unit_details": ([])]);
+		foreach (country->sub_unit; string type; string id) {
+			info->unit_details[id] = ([
+				"type": type, //eg "infantry"
+				"defn": G->CFG->unit_definitions[id],
+			]);
+		}
+		info->armies = Array.arrayify(country->army);
+		info->mod = ([]);
+		mapping all = G->G->analysis->all_country_modifiers(data, country);
+		//TODO: Province bonuses?? local_{defender,attacker}_dice_roll_bonus, own_territory_dice_roll_bonus,
+		//terrain, river crossing, landing from ship...
+		foreach (({
+			"military_tactics", "discipline", "land_morale",
+			"infantry_fire", "infantry_shock",
+			"cavalry_fire", "cavalry_shock",
+			"artillery_fire", "artillery_shock",
+			"infantry_power", "cavalry_power", "artillery_power",
+			"morale_damage", "morale_damage_received",
+			"global_defender_dice_roll_bonus", "global_attacker_dice_roll_bonus",
+		}), string mod) info->mod[mod] = all[mod] || 0;
+		infos += ({info});
+	}
+	send_update(({conn->sock}), ([
+		"cmd": "analyzebattles",
+		"countries": infos,
+	]));
+}
+
 constant custnat_keys = "name adjective country_colors index graphical_culture technology_group religion "
 			"government government_reform government_rank idea culture monarch heir queen" / " ";
 mapping custnat_handlers = ([

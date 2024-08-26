@@ -2331,19 +2331,6 @@ void analyze_wars(mapping data, multiset(string) tags, mapping write) {
 			//aren't too many (and they're shared by all nations), so I just hard-code them.
 			mapping unit_types = mkmapping(values(country->sub_unit), indices(country->sub_unit));
 			mapping mil = ([]), mercs = ([]);
-			//Collect some useful info about the units a country is using
-			//FIXME: Will need to be able to do this for countries you're not at war with (yet),
-			//to allow for Luke 14:31-32 style analysis.
-			//Move all this with unit details and armies into an on-request info section
-			//It will also give info about your own nation (based on the ws_group). In the
-			//front end, make this available for all war enemies (in the "Wars" section),
-			//and in the nation details sidebar. Should be sufficient.
-			/*partic->unit_details = ([]);
-			foreach (country->sub_unit; string type; string id) 
-				partic->unit_details[id] = ([
-					"type": type, //eg "infantry"
-					"defn": G->CFG->unit_definitions[id],
-				]);*/
 			if (country->army) foreach (Array.arrayify(country->army), mapping army) {
 				string merc = army->mercenary_company ? "merc_" : "";
 				foreach (Array.arrayify(army->regiment), mapping reg) {
@@ -2440,19 +2427,27 @@ void analyze_states(mapping data, string name, string tag, mapping write, mappin
 protected void create() {
 	mapping data = G->G->last_parsed_savefile;
 	if (!data) return;
-	mapping write = ([]);
-	analyze_wars(data, (<data->players_countries[1]>), write);
-	//werror("Wars: %O\n", write->wars);
-	return;
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
 	//NOTE: Reform "Expand Temple Rights" aka secure_clergy_power_reform does not
 	//seem to properly apply its effect. Possible issue with has_tax_building_trigger?
-	werror("702: %O\n", provincial_unrest(data, "702", 1));
+	//werror("702: %O\n", provincial_unrest(data, "702", 1));
 	mapping country = data->countries[data->player];
 	m_delete(country, "all_country_modifiers");
-	all_country_modifiers(data, country);
+	mapping attrs = all_country_modifiers(data, country);
+	foreach (({
+		"military_tactics", "discipline", "land_morale",
+		"infantry_fire", "infantry_shock",
+		"cavalry_fire", "cavalry_shock",
+		"artillery_fire", "artillery_shock",
+		"infantry_power", "cavalry_power", "artillery_power",
+		"morale_damage", "morale_damage_received",
+		"global_defender_dice_roll_bonus", "global_attacker_dice_roll_bonus",
+	}), string mod) {
+		werror("%s: %d%{\n\t%s%}\n", L10N(mod), attrs[mod], attrs->_sources[mod] || ({ }));
+	}
+	return;
 	DEBUG_TRIGGER_MATCHES = 1;
 	foreach (G->CFG->triggered_modifiers; string id; mapping mod) {
 		string label = "Applicable!";
