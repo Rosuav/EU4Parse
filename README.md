@@ -40,3 +40,10 @@ Key in, or select, an army for each side (for now, assume no merging of stacks).
 Assume a midrange combat dice roll, which can be forced in-game with "combat_dice N" (5?)
 Predict how combat will go. Test it against the in-game behaviour.
 Maybe show red highlights for things that are working against us, green for things that are in our favour?
+
+
+Test nations at 2919 Luziana and 2892 Araxas
+
+1. Recreate the calculations, using a fixed dice roll of 5
+2. Show the impact of changing each modifier. Rank the modifiers by how much effect each would have if changed.
+3. Make recommendations about potential changes
