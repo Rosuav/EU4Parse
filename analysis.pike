@@ -2281,7 +2281,7 @@ void analyze_flagships(mapping data, mapping write) {
 
 void analyze_wars(mapping data, multiset(string) tags, mapping write) {
 	write->wars = (["current": ({ }), "rumoured": G->G->war_rumours]);
-	foreach (values(data->active_war || ({ })), mapping war) {
+	foreach (values(Array.arrayify(data->active_war)), mapping war) {
 		if (!mappingp(war)) continue; //Dunno what's with these, there seem to be some strings in there.
 		//To keep displaying the war after all players separate-peace out, use
 		//war->persistent_attackers and war->persistent_defenders instead.
@@ -2428,6 +2428,9 @@ protected void create() {
 	mapping data = G->G->last_parsed_savefile;
 	if (!data) return;
 	mapping write = ([]);
+	analyze_wars(data, (<data->players_countries[1]>), write);
+	werror("Wars: %O\n", write->wars);
+	return;
 	//analyze_states(data, "Rosuav", data->players_countries[1], write, ([]));
 	//analyze_obscurities(data, "Rosuav", data->players_countries[1], write, ([]));
 	//NOTE: Tolerances seem to be being incorrectly calculated for theocracies.
