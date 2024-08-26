@@ -285,21 +285,27 @@ void websocket_cmd_savecustom(mapping conn, mapping data) {
 	]));
 }
 
+//For a group like "TUR", return it unchanged; but a group like "Rosuav" will be
+//translated into the actual country tag that that player is controlling.
+string group_to_tag(mapping data, string tag) {
+	if (!data->countries[tag] && data->players_countries) {
+		//See if it's a player identifier. These get rechecked every get_state
+		//because they will track the player through tag changes (eg if you were
+		//Castille (CAS) and you form Spain (SPA), your tag will change, but you
+		//want to see data for Spain now plsthx).
+		foreach (data->players_countries / 2, [string name, string trytag])
+			if (lower_case(tag) == lower_case(name)) return trytag;
+	}
+	return tag;
+}
+
 mapping get_state(string group) {
 	mapping data = G->G->last_parsed_savefile;
 	if (G->G->error) return (["error": G->G->error]);
 	if (!data) return (["error": "Processing savefile... "]);
 	//For the landing page, offer a menu of player countries
 	if (group == "?!?") return (["menu": data->players_countries / 2]);
-	string tag = group;
-	if (!data->countries[tag]) {
-		//See if it's a player identifier. These get rechecked every get_state
-		//because they will track the player through tag changes (eg if you were
-		//Castille (CAS) and you form Spain (SPA), your tag will change, but you
-		//want to see data for Spain now plsthx).
-		if (data->players_countries) foreach (data->players_countries / 2, [string name, string trytag])
-			if (lower_case(tag) == lower_case(name)) tag = trytag;
-	}
+	string tag = group_to_tag(data, group);
 	mapping country = data->countries[tag];
 	if (!country) return (["error": "Country/player not found: " + group]);
 	mapping ret = (["tag": tag, "self": data->countries[tag], "highlight": ([]), "recent_peace_treaties": G->G->recent_peace_treaties]);
