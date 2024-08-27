@@ -2457,6 +2457,7 @@ protected void create() {
 		"infantry_power", "cavalry_power", "artillery_power",
 		"morale_damage", "morale_damage_received",
 		"global_defender_dice_roll_bonus", "global_attacker_dice_roll_bonus",
+		"combat_width",
 	}), string mod) {
 		werror("%s: %d%{\n\t%s%}\n", L10N(mod), attrs[mod], attrs->_sources[mod] || ({ }));
 	}

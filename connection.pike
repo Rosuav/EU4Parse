@@ -217,6 +217,7 @@ void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
 	});
 	if (has_value(countries, 0)) return;
 	array infos = ({ });
+	int combat_width = 15;
 	foreach (countries, mapping country) {
 		mapping info = (["tag": country->tag, "unit_details": ([])]);
 		foreach (country->sub_unit; string type; string id) {
@@ -225,7 +226,20 @@ void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
 				"defn": G->CFG->unit_definitions[id],
 			]);
 		}
-		info->armies = Array.arrayify(country->army);
+		info->armies = ({ });
+		foreach (Array.arrayify(country->army), mapping raw) {
+			mapping army = ([
+				"name": raw->name,
+				//TODO: General's pips, if any; otherwise ({0,0,0,0})
+				//Also general's trait, if any.
+				//Not supported by this tool, but what happens if two armies with two generals
+				//combine, and both have traits? Do you get both?
+				"regiments": Array.arrayify(raw->regiment), //TODO: Is the arrayify needed? Probably.
+				"infantry": 0, "cavalry": 0, "artillery": 0,
+			]);
+			foreach (army->regiments, mapping reg) army[info->unit_details[reg->type]->type]++;
+			info->armies += ({army});
+		}
 		info->mod = ([]);
 		mapping all = G->G->analysis->all_country_modifiers(data, country);
 		//TODO: Province bonuses?? local_{defender,attacker}_dice_roll_bonus, own_territory_dice_roll_bonus,
@@ -240,11 +254,14 @@ void websocket_cmd_analyzebattles(mapping conn, mapping msg) {
 			"global_defender_dice_roll_bonus", "global_attacker_dice_roll_bonus",
 		}), string mod) info->mod[mod] = all[mod] || 0;
 		info->mod->land_morale = all->base_land_morale * (1000 + all->land_morale) / 1000;
+		int wid = all->combat_width + 15; //The base combat width is in defines.lua so we just add 15 manually
+		if (wid > combat_width) combat_width = wid; //NOTE: If reworking this for naval combat, remember that naval combat width is per side.
 		infos += ({info});
 	}
 	send_update(({conn->sock}), ([
 		"cmd": "analyzebattles",
 		"countries": infos,
+		"combat_width": combat_width,
 	]));
 }
 

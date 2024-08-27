@@ -38,24 +38,34 @@ document.body.appendChild(replace_content(null, DIALOG({id: "detailsdlg"}, SECTI
 document.body.appendChild(replace_content(null, DIALOG({id: "battlesdlg"}, SECTION([
 	HEADER([H3("Combat analysis"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
 	TABLE([
-		//1. Select country (two of; self in first slot by default)
-		//2. Select army. Assume for now no posseing up.
-		//3. Choose which is attacking
-		//4. Show analysis
 		TR([
-			TD({id: "battles_nation_1"}), //Will be populated with flags
+			TD({id: "battles_nation_0"}), //Will be populated with flags
 			TH("Nations"),
-			TD({id: "battles_nation_2"}),
+			TD({id: "battles_nation_1"}),
 		]),
 		TR([
-			TD(SELECT({id: "battles_army_1"}, OPTION({value: ""}, "Select..."))),
+			TD(SELECT({id: "battles_army_0"}, OPTION({value: ""}, "Select..."))),
 			TH("Armies"),
-			TD(SELECT({id: "battles_army_2"}, OPTION({value: ""}, "Select..."))),
+			TD(SELECT({id: "battles_army_1"}, OPTION({value: ""}, "Select..."))),
 		]),
 		TR([
 			TD(LABEL([INPUT({type: "radio", checked: true, name: "battles_attacker", value: "1"}), "Attacking"])),
 			TH("Direction"),
 			TD(LABEL([INPUT({type: "radio", name: "battles_attacker", value: "2"}), "Attacking"])),
+		]),
+		TR([
+			TD([
+				SELECT({id: "battles_terrain"}, [
+					OPTION({value: 0}, "No terrain penalty"),
+					OPTION({value: 1}, "Hills, forest, etc (1)"),
+					OPTION({value: 2}, "Mountains (2)"),
+				]), BR(),
+				SELECT({id: "battles_crossing"}, [
+					OPTION({value: 0}, "No crossing"),
+					OPTION({value: 1}, "River (1)"),
+					OPTION({value: 2}, "Strait/landing (2)"),
+				]),
+			]),
 		]),
 	]),
 	DIV({id: "battlesmain"}),
@@ -553,10 +563,21 @@ section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current
 ]]);
 
 on("click", ".analyzebattles", e => ws_sync.send({cmd: "analyzebattles", tag: e.match.dataset.tag}));
+ws_sync.send({cmd: "analyzebattles", tag: "D00"}); //HACK
+let battledata = null;
 export function sockmsg_analyzebattles(msg) {
-	//Populate all drop-downs
-	console.log("Analyze battles", msg);
-	console.log("Country info", country_info[hovertag]);
+	battledata = msg;
+	msg.countries.forEach((country, which) => {
+		replace_content("#battles_nation_" + which, COUNTRY(country.tag));
+		replace_content("#battles_army_" + which, [
+			OPTION({value: ""}, "Select..."),
+			country.armies.map((army, i) => OPTION({value: i}, [
+				army.name,
+				" (" + army.infantry + "/" + army.cavalry + "/" + army.artillery + ")",
+				//TODO: General, if any. Distinguish a 0/0/0/0 general from no general at all?
+			])),
+		]).value = "";
+	});
 	DOM("#battlesdlg").showModal();
 }
 
