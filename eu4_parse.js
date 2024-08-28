@@ -3,7 +3,7 @@ import {lindt, replace_content, DOM, fix_dialogs} from "https://rosuav.github.io
 const {A, ABBR, B, BR, BUTTON, DETAILS, DIALOG, DIV, FORM, H1, H3, H4, HEADER, IMG, INPUT, LABEL, LI, NAV, OPTGROUP, OPTION, P, SECTION, SELECT, SPAN, STRONG, SUMMARY, TABLE, TD, TH, THEAD, TR, UL} = lindt; //autoimport
 const {BLOCKQUOTE, I, PRE} = lindt; //Currently autoimport doesn't recognize the section() decorator
 
-let defaultsection = "wars"; //If nonnull, will autoopen this section
+let defaultsection = null; //If nonnull, will autoopen this section
 
 document.body.appendChild(replace_content(null, DIALOG({id: "customnationsdlg"}, SECTION([
 	HEADER([H3("Custom nations"), DIV(BUTTON({type: "button", class: "dialog_cancel"}, "x"))]),
@@ -563,7 +563,7 @@ section("wars", "Wars", "Wars", state => [SUMMARY("Wars: " + (state.wars.current
 ]]);
 
 on("click", ".analyzebattles", e => ws_sync.send({cmd: "analyzebattles", tag: e.match.dataset.tag}));
-ws_sync.send({cmd: "analyzebattles", tag: "D00"}); //HACK
+//ws_sync.send({cmd: "analyzebattles", tag: "D00"}); //HACK
 let battledata = null;
 export function sockmsg_analyzebattles(msg) {
 	battledata = msg;
