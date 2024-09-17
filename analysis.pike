@@ -1100,7 +1100,7 @@ void analyze_findbuildings(mapping data, string name, string tag, mapping write,
 		int gotone = 0;
 		foreach (prov->buildings || ([]); string b;) {
 			if (b == highlight) {gotone = 1; break;}
-			while (string upg = G->CFG->building_types[b]->make_obsolete) {
+			while (string upg = G->CFG->building_types[b]->?make_obsolete) {
 				if (upg == highlight) {gotone = 1; break;}
 				b = upg;
 			}
