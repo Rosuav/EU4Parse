@@ -558,21 +558,6 @@ class Connection(Stdio.File sock) {
 		sock->write(""); //Force a write callback (shouldn't be necessary??)
 	}
 
-	void cycle_provinces(string country) {
-		if (!G->G->last_parsed_savefile) return;
-		if (!G->G->provincecycle[country]) {
-			sock->write("Need to select a cycle group before cycling provinces\n");
-			return;
-		}
-		[string id, array rest] = Array.shift(G->G->provincecycle[country]);
-		G->G->provincecycle[country] = rest + ({id});
-		update_group(country);
-		//Note: Ignores buffered mode and writes directly. I don't think it's possible to
-		//put a "shutdown write direction when done" marker into the Buffer.
-		sock->write("provfocus " + id + "\nexit\n");
-		sock->close("w");
-	}
-
 	void sockread() {
 		while (array ret = incoming->sscanf("%s\n")) {
 			string cmd = String.trim(ret[0]), arg = "";
@@ -584,7 +569,6 @@ class Connection(Stdio.File sock) {
 					else sock->write("Warning: Old 'notify' no longer supported, using 'notify province' instead\n");
 					notify = arg; notifiers[this] = 1;
 					break;
-				case "province": cycle_provinces(arg); break;
 				default: sock->write(sprintf("Unknown command %O\n", cmd)); break;
 			}
 		}
