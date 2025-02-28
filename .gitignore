@@ -1,4 +1,0 @@
-*.json
-savefile
-/* Temporarily exclude the Bison-generated file too */
-savefile.tab.c
