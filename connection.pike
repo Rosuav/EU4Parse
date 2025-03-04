@@ -594,7 +594,7 @@ protected void create(string name) {
 	if (mappingp(cfg) && cfg->effect_display_mode) effect_display_mode = cfg->effect_display_mode;
 	G->G->ws_msg = ws_msg;
 	if (G->G->have_sockets) return; //Hack: Don't relisten on sockets on code reload
-	Protocols.WebSocket.Port(http_handler, ws_handler, 8087, "::")->request_program = Function.curry(trytls)(ws_handler);
+	Protocols.WebSocket.Port(http_handler, ws_handler, 1200, "::")->request_program = Function.curry(trytls)(ws_handler);
 	tlsctx = SSL.Context();
 	array|zero wildcard = ({"*"});
 	foreach (({"", "_local"}), string tag) {
