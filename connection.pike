@@ -608,6 +608,6 @@ protected void create(string name) {
 		}
 	}
 	Stdio.Port mainsock = Stdio.Port();
-	mainsock->bind(1444, sock_connected, "::", 1);
+	mainsock->bind(1821, sock_connected, "::", 1);
 	G->G->have_sockets = 1;
 }
